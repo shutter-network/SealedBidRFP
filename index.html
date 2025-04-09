@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>On-Chain Sealed Bid RFP Tool</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: Arial, sans-serif;
+    }
+    body {
+      margin: 20px;
+    }
+    h1, h2 {
+      color: #333;
+    }
+    .section {
+      margin-bottom: 40px;
+      border: 1px solid #ccc;
+      padding: 15px;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+    }
+    input, textarea, button {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+    }
+    #status {
+      margin-top: 10px;
+      font-weight: bold;
+    }
+    pre {
+      background: #f5f5f5;
+      padding: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>On-Chain Sealed Bid RFP Tool</h1>
+  <div id="status">Status: Not connected.</div>
+  <button onclick="connectWallet()">Connect Wallet</button>
+
+  <!-- Section 1: RFP Creation -->
+  <div class="section" id="rfp-creation">
+    <h2>Create RFP (For RFP Creator)</h2>
+    <label for="rfpTitle">Title</label>
+    <input type="text" id="rfpTitle" placeholder="Enter RFP title" />
+
+    <label for="rfpDescription">Description</label>
+    <textarea id="rfpDescription" placeholder="Enter description"></textarea>
+
+    <label for="submissionDeadline">Submission Deadline (choose date/time)</label>
+    <input type="datetime-local" id="submissionDeadline" />
+
+    <label for="rfpRevealDeadline">Reveal Deadline (choose date/time)</label>
+    <input type="datetime-local" id="rfpRevealDeadline" />
+
+    <button id="createRFP-btn">Create RFP</button>
+    <p>New RFP ID: <span id="rfpIdOutput">N/A</span></p>
+  </div>
+
+  <!-- Section 2: Bid Submission -->
+  <div class="section" id="bid-submission">
+    <h2>Submit a Sealed Bid</h2>
+    <label for="rfpIdForBid">RFP ID</label>
+    <input type="number" id="rfpIdForBid" placeholder="Enter RFP ID" />
+
+    <label for="bidText">Your Bid Details</label>
+    <textarea id="bidText" placeholder="Enter your bid details"></textarea>
+
+    <button id="encryptBid-btn">Encrypt Bid</button>
+    <div>
+      <strong>Ciphertext:</strong>
+      <pre id="ciphertextOutput"></pre>
+    </div>
+    <button id="submitBid-btn">Submit Bid On-chain</button>
+    <p>Bid ID: <span id="bidIdOutput">N/A</span></p>
+  </div>
+
+  <!-- Section 3: Bid Reveal -->
+  <div class="section" id="bid-reveal">
+    <h2>Reveal Your Bid</h2>
+    <label for="rfpIdForReveal">RFP ID</label>
+    <input type="number" id="rfpIdForReveal" placeholder="Enter RFP ID" />
+
+    <label for="bidIdForReveal">Bid ID</label>
+    <input type="number" id="bidIdForReveal" placeholder="Enter Bid ID" />
+
+    <button id="revealBid-btn">Reveal Bid</button>
+    <div>
+      <strong>Decrypted Bid:</strong>
+      <pre id="decryptedOutput"></pre>
+    </div>
+  </div>
+
+  <!-- Load the Shutter runtime and your modules -->
+  <script src="./blst.js"></script>
+  <script type="module" src="./main.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
