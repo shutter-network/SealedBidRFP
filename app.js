@@ -74,7 +74,6 @@ export async function connectWallet() {
 
     signer = provider.getSigner();
     contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-
     setStatus("Wallet connected to Gnosis Chain!");
   } catch (err) {
     console.error("connectWallet error:", err);
@@ -124,13 +123,10 @@ async function createRFP() {
       keyData
     );
     console.log("Transaction sent for RFP creation:", tx);
-    const receipt = await tx.wait();
-    console.log("RFP created!", receipt);
-
-    // Assuming event RFPCreated emits the new RFP ID
-    // For simplicity, retrieve the current rfpCount from the contract and subtract one.
+    await tx.wait();
+    console.log("RFP created!");
     const rfpCount = await contract.rfpCount();
-    const newRFPId = rfpCount - 1;
+    const newRFPId = rfpCount.sub(1).toNumber();
     document.getElementById("rfpIdOutput").textContent = newRFPId.toString();
     setStatus(`RFP created successfully with ID ${newRFPId}`);
   } catch (err) {
@@ -151,13 +147,12 @@ async function encryptBidForRFP() {
   }
   setStatus("Fetching RFP encryption key...");
   try {
-    // Assume the contract has a getter to return the encryption key for an RFP
+    // Get the encryption key stored on-chain for the RFP
     const keyData = await contract.getRFPEncryptionKey(rfpId);
     if (!keyData) {
       setStatus("Encryption key not found for this RFP.");
       return;
     }
-    // Parse the encryption key which we stored as JSON string during RFP creation.
     const encryptionKeyObj = JSON.parse(keyData);
     setStatus("Encrypting your bid...");
     const bidHex = "0x" + Buffer.from(bidText, "utf8").toString("hex");
@@ -190,9 +185,8 @@ async function submitBid() {
     await tx.wait();
     console.log("Bid submitted!");
     setStatus("Bid submitted successfully!");
-    // Retrieve bid ID (for simplicity, fetch the bid count for this RFP and subtract one)
     const rfp = await contract.rfps(rfpId);
-    const bidId = rfp.bidCount - 1;
+    const bidId = rfp.bidCount.sub(1).toNumber();
     document.getElementById("bidIdOutput").textContent = bidId.toString();
   } catch (err) {
     console.error("submitBid error:", err);
@@ -212,19 +206,7 @@ async function revealBid() {
   }
   setStatus("Revealing bid on-chain...");
   try {
-    // For reveal, the bidder is responsible for decrypting their own bid (off-chain)
-    // In a real scenario, you may use your local decryption function once the RFP reveal deadline has passed.
-    // Here we simulate retrieving the on-chain encrypted bid,
-    // decrypting it using the Shutter API (for demo purposes),
-    // and then calling revealBid with the plaintext.
-    const rfp = await contract.rfps(rfpId);
-    const keyData = rfp.encryptionKey;
-    if (!keyData) {
-      setStatus("RFP encryption key not found.");
-      return;
-    }
-    // For simplicity, assume the bidder has kept a copy of their plaintext bid
-    // In practice, the user should locally decrypt or securely store their plaintext.
+    // For simplicity, we assume the bidder reuses the plaintext bid input they had entered
     const plaintextBid = document.getElementById("bidText").value.trim();
     if (!plaintextBid) {
       setStatus("Plaintext bid not found. Please re-enter your bid details.");
@@ -242,8 +224,64 @@ async function revealBid() {
 }
 
 // ======================
-// Shutter Integration Functions
-// (Reused from your Shutter Predict code)
+// F) Load and Display All RFPs with Their Bids
+// ======================
+async function loadRFPs() {
+  try {
+    let rfpCountBN = await contract.rfpCount();
+    const rfpCount = rfpCountBN.toNumber();
+    const container = document.getElementById("rfpList");
+    container.innerHTML = ""; // Clear previous list
+    for (let i = 0; i < rfpCount; i++) {
+      let rfp = await contract.rfps(i);
+      // rfp: [creator, title, description, submissionDeadline, revealDeadline, encryptionKey, bidCount]
+      const bidCount = rfp.bidCount.toNumber();
+      const rfpDiv = document.createElement("div");
+      rfpDiv.style.border = "1px solid #aaa";
+      rfpDiv.style.padding = "10px";
+      rfpDiv.style.marginBottom = "10px";
+
+      let html = `<strong>RFP ID:</strong> ${i}<br>
+                  <strong>Title:</strong> ${rfp.title}<br>
+                  <strong>Description:</strong> ${rfp.description}<br>
+                  <strong>Submission Deadline:</strong> ${formatTimestamp(rfp.submissionDeadline.toNumber())}<br>
+                  <strong>Reveal Deadline:</strong> ${formatTimestamp(rfp.revealDeadline.toNumber())}<br>
+                  <strong>Number of Bids:</strong> ${bidCount}<br>`;
+      rfpDiv.innerHTML = html;
+
+      // Create sub-list for bids
+      const bidList = document.createElement("div");
+      bidList.style.marginLeft = "20px";
+      for (let j = 0; j < bidCount; j++) {
+        const bid = await contract.bids(i, j);
+        // bid: [bidder, encryptedBid, revealed, plaintextBid]
+        const currentTime = Math.floor(Date.now() / 1000);
+        let bidContent = "";
+        if (currentTime >= rfp.revealDeadline.toNumber() && bid.revealed) {
+          bidContent = bid.plaintextBid;
+        } else {
+          bidContent = bid.encryptedBid;
+        }
+        const bidDiv = document.createElement("div");
+        bidDiv.style.border = "1px dashed #888";
+        bidDiv.style.padding = "5px";
+        bidDiv.style.marginBottom = "5px";
+        bidDiv.innerHTML = `<strong>Bid ID:</strong> ${j}<br>
+                            <strong>Bidder:</strong> ${bid.bidder}<br>
+                            <strong>${(currentTime >= rfp.revealDeadline.toNumber() && bid.revealed) ? "Plaintext Bid" : "Encrypted Bid"}:</strong> ${bidContent}`;
+        bidList.appendChild(bidDiv);
+      }
+      rfpDiv.appendChild(bidList);
+      container.appendChild(rfpDiv);
+    }
+  } catch (err) {
+    console.error("loadRFPs error:", err);
+    setStatus("Error loading RFPs: " + err.message);
+  }
+}
+
+// ======================
+// Shutter Integration Functions (Reused from your Shutter Predict code)
 // ======================
 async function registerIdentity(decryptionTimestamp) {
   const identityPrefix = generateRandomHex(32);
@@ -299,10 +337,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   
   CONTRACT_ABI = await fetch("contract_abi.json").then(res => res.json());
 
-  // Hook up button event listeners for new functions
+  // Hook up button event listeners for our functions
   document.getElementById("createRFP-btn").addEventListener("click", createRFP);
   document.getElementById("encryptBid-btn").addEventListener("click", encryptBidForRFP);
   document.getElementById("submitBid-btn").addEventListener("click", submitBid);
   document.getElementById("revealBid-btn").addEventListener("click", revealBid);
+  document.getElementById("refreshRFPs-btn").addEventListener("click", loadRFPs);
 });
 window.connectWallet = connectWallet;
