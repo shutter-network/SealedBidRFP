@@ -5,108 +5,204 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>On-Chain Sealed Bid RFP Tool</title>
   <style>
-    * {
-      box-sizing: border-box;
-      font-family: Arial, sans-serif;
-    }
+    /* Global Styles */
     body {
-      margin: 20px;
-    }
-    h1, h2 {
+      margin: 0;
+      padding: 0;
+      background-color: #fff;
+      font-family: Arial, sans-serif;
       color: #333;
     }
-    .section {
-      margin-bottom: 40px;
-      border: 1px solid #ccc;
-      padding: 15px;
+    .header {
+      background-color: #0044a4;
+      color: #fff;
+      padding: 20px;
+      text-align: center;
+    }
+    .container {
+      margin: 20px;
+    }
+    #status {
+      margin-bottom: 20px;
+      font-weight: bold;
+    }
+    button {
+      background-color: #0044a4;
+      color: #fff;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      font-size: 14px;
+    }
+    button:hover {
+      background-color: #003377;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+      font-size: 14px;
     }
     label {
       display: block;
       margin-top: 10px;
-    }
-    input, textarea, button {
-      width: 100%;
-      padding: 8px;
-      margin-top: 5px;
-    }
-    #status {
-      margin-top: 10px;
       font-weight: bold;
     }
     pre {
-      background: #f5f5f5;
+      background-color: #f5f5f5;
       padding: 10px;
+      overflow-x: auto;
+      font-size: 13px;
+    }
+    .section {
+      margin-bottom: 20px;
+    }
+    .list-item {
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 10px;
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+    .bid-item {
+      border: 1px dashed #0044a4;
+      padding: 8px;
+      margin-top: 5px;
+      font-size: 13px;
+    }
+    
+    /* Tab Styles */
+    .tab-container {
+      margin-top: 20px;
+    }
+    .tabs {
+      display: flex;
+      border-bottom: 2px solid #0044a4;
+    }
+    .tab {
+      padding: 10px 20px;
+      cursor: pointer;
+      background-color: #fff;
+      border: 2px solid #0044a4;
+      border-bottom: none;
+      border-radius: 4px 4px 0 0;
+      margin-right: 10px;
+      color: #0044a4;
+      transition: background-color 0.2s;
+    }
+    .tab.active {
+      background-color: #0044a4;
+      color: #fff;
+    }
+    .tab-content {
+      border: 2px solid #0044a4;
+      border-radius: 0 4px 4px 4px;
+      padding: 20px;
+      background-color: #fff;
     }
   </style>
 </head>
 <body>
-  <h1>On-Chain Sealed Bid RFP Tool</h1>
-  <div id="status">Status: Not connected.</div>
-  <button onclick="connectWallet()">Connect Wallet</button>
-
-  <!-- Section 1: RFP Creation -->
-  <div class="section" id="rfp-creation">
-    <h2>Create RFP (For RFP Creator)</h2>
-    <label for="rfpTitle">Title</label>
-    <input type="text" id="rfpTitle" placeholder="Enter RFP title" />
-
-    <label for="rfpDescription">Description</label>
-    <textarea id="rfpDescription" placeholder="Enter description"></textarea>
-
-    <label for="submissionDeadline">Submission Deadline (choose date/time)</label>
-    <input type="datetime-local" id="submissionDeadline" />
-
-    <label for="rfpRevealDeadline">Reveal Deadline (choose date/time)</label>
-    <input type="datetime-local" id="rfpRevealDeadline" />
-
-    <button id="createRFP-btn">Create RFP</button>
-    <p>New RFP ID: <span id="rfpIdOutput">N/A</span></p>
+  <div class="header">
+    <h1>On-Chain Sealed Bid RFP</h1>
+    <p>Open RFPs &amp; Bids</p>
   </div>
+  <div class="container">
+    <div id="status">Status: Not connected.</div>
+    <button onclick="connectWallet()">Connect Wallet</button>
 
-  <!-- Section 2: Bid Submission -->
-  <div class="section" id="bid-submission">
-    <h2>Submit a Sealed Bid</h2>
-    <label for="rfpIdForBid">RFP ID</label>
-    <input type="number" id="rfpIdForBid" placeholder="Enter RFP ID" />
-
-    <label for="bidText">Your Bid Details</label>
-    <textarea id="bidText" placeholder="Enter your bid details"></textarea>
-
-    <button id="encryptBid-btn">Encrypt Bid</button>
-    <div>
-      <strong>Ciphertext:</strong>
-      <pre id="ciphertextOutput"></pre>
+    <!-- Open RFPs List -->
+    <div class="section" id="open-rfps">
+      <h2 style="color: #0044a4;">Open RFPs</h2>
+      <button id="refreshRFPs-btn">Refresh RFP List</button>
+      <div id="rfpList"></div>
     </div>
-    <button id="submitBid-btn">Submit Bid On-chain</button>
-    <p>Bid ID: <span id="bidIdOutput">N/A</span></p>
-  </div>
 
-  <!-- Section 3: Bid Reveal -->
-  <div class="section" id="bid-reveal">
-    <h2>Reveal Your Bid</h2>
-    <label for="rfpIdForReveal">RFP ID</label>
-    <input type="number" id="rfpIdForReveal" placeholder="Enter RFP ID" />
+    <!-- Tab Navigation for RFP Creation and Bid Submission -->
+    <div class="tab-container">
+      <div class="tabs">
+        <div class="tab active" data-tab="create-tab">Create RFP</div>
+        <div class="tab" data-tab="bid-tab">Submit Bid</div>
+      </div>
+      <div class="tab-content" id="create-tab">
+        <h2 style="color: #0044a4;">Create RFP</h2>
+        <div class="section">
+          <label for="rfpTitle">Title</label>
+          <input type="text" id="rfpTitle" placeholder="Enter RFP title" />
+        </div>
+        <div class="section">
+          <label for="rfpDescription">Description</label>
+          <textarea id="rfpDescription" placeholder="Enter RFP description"></textarea>
+        </div>
+        <div class="section">
+          <label for="submissionDeadline">Submission Deadline (date/time)</label>
+          <input type="datetime-local" id="submissionDeadline" />
+        </div>
+        <div class="section">
+          <label for="rfpRevealDeadline">Reveal Deadline (date/time)</label>
+          <input type="datetime-local" id="rfpRevealDeadline" />
+        </div>
+        <button id="createRFP-btn">Create RFP</button>
+        <p>New RFP ID: <span id="rfpIdOutput">N/A</span></p>
+      </div>
+      <div class="tab-content" id="bid-tab" style="display: none;">
+        <h2 style="color: #0044a4;">Submit a Bid</h2>
+        <div class="section">
+          <label for="rfpIdForBid">RFP ID</label>
+          <input type="number" id="rfpIdForBid" placeholder="Enter RFP ID" />
+        </div>
+        <div class="section">
+          <label for="bidText">Your Bid Details</label>
+          <textarea id="bidText" placeholder="Enter your bid details"></textarea>
+        </div>
+        <button id="encryptBid-btn">Encrypt Bid</button>
+        <div class="section">
+          <strong>Ciphertext:</strong>
+          <pre id="ciphertextOutput"></pre>
+        </div>
+        <button id="submitBid-btn">Submit Bid On-chain</button>
+        <p>Bid ID: <span id="bidIdOutput">N/A</span></p>
+      </div>
+    </div>
 
-    <label for="bidIdForReveal">Bid ID</label>
-    <input type="number" id="bidIdForReveal" placeholder="Enter Bid ID" />
-
-    <button id="revealBid-btn">Reveal Bid</button>
-    <div>
-      <strong>Decrypted Bid:</strong>
-      <pre id="decryptedOutput"></pre>
+    <!-- Bid Reveal Section -->
+    <div class="section" id="bid-reveal">
+      <h2 style="color: #0044a4;">Reveal Your Bid</h2>
+      <div class="section">
+        <label for="rfpIdForReveal">RFP ID</label>
+        <input type="number" id="rfpIdForReveal" placeholder="Enter RFP ID" />
+      </div>
+      <div class="section">
+        <label for="bidIdForReveal">Bid ID</label>
+        <input type="number" id="bidIdForReveal" placeholder="Enter Bid ID" />
+      </div>
+      <button id="revealBid-btn">Reveal Bid</button>
+      <div class="section">
+        <strong>Decrypted Bid:</strong>
+        <pre id="decryptedOutput"></pre>
+      </div>
     </div>
   </div>
 
-  <!-- Section 4: View All RFPs -->
-  <div class="section" id="view-rfps">
-    <h2>All RFPs &amp; Bids</h2>
-    <button id="refreshRFPs-btn">Refresh RFP List</button>
-    <div id="rfpList"></div>
-  </div>
-
-  <!-- Include the Shutter library and initialization scripts -->
+  <!-- Load the Shutter library and initialization scripts -->
   <script src="./blst.js"></script>
   <script type="module" src="./main.js"></script>
   <script type="module" src="./app.js"></script>
+  <script>
+    // Tab switching functionality
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', function() {
+        // Remove 'active' class from all tabs and hide all content areas
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(tc => tc.style.display = 'none');
+        // Activate the clicked tab and show its content
+        this.classList.add('active');
+        const tabId = this.getAttribute('data-tab');
+        document.getElementById(tabId).style.display = 'block';
+      });
+    });
+  </script>
 </body>
 </html>
