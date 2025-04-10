@@ -2,95 +2,177 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>On-Chain Sealed Bid RFP</title>
   <style>
     /* Global Styles */
+    * {
+      box-sizing: border-box;
+      font-family: Arial, sans-serif;
+    }
     body {
       margin: 0;
       padding: 0;
-      background-color: #fff;
-      font-family: Arial, sans-serif;
+      background-color: #f8f9fa;
       color: #333;
     }
     .header {
       background-color: #0044a4;
       color: #fff;
-      padding: 20px;
+      padding: 24px;
       text-align: center;
+      margin-bottom: 20px;
+    }
+    .header h1 {
+      margin: 0 0 10px 0;
+      font-size: 28px;
+    }
+    .header p {
+      margin: 0;
+      font-size: 16px;
     }
     .container {
-      margin: 20px;
+      width: 90%;
+      max-width: 1200px;
+      margin: 0 auto 60px auto;
     }
     #status {
-      margin-bottom: 20px;
+      margin-bottom: 24px;
       font-weight: bold;
+      font-size: 15px;
+      color: #333;
     }
     button {
       background-color: #0044a4;
       color: #fff;
-      padding: 8px 12px;
+      padding: 8px 14px;
       border: none;
-      border-radius: 4px;
+      border-radius: 6px;
       cursor: pointer;
       transition: background-color 0.2s;
       font-size: 14px;
+      margin-right: 6px;
     }
     button:hover {
       background-color: #003377;
     }
     input, textarea {
       width: 100%;
-      padding: 8px;
+      padding: 10px;
       margin-top: 5px;
       font-size: 14px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
     }
     label {
       display: block;
       margin-top: 10px;
       font-weight: bold;
+      font-size: 14px;
+      color: #333;
     }
     pre {
       background-color: #f5f5f5;
-      padding: 10px;
+      padding: 12px;
       overflow-x: auto;
       font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      border-radius: 4px;
+      margin-top: 8px;
+      margin-bottom: 8px;
     }
     .section {
-      margin-bottom: 20px;
+      margin-bottom: 30px;
     }
-    .list-item {
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      padding: 10px;
-      margin-bottom: 10px;
-      font-size: 14px;
+    .load-more {
+      text-align: center;
+      margin-top: 15px;
     }
     .bid-item {
-      border: 1px dashed #0044a4;
+      background-color: #fefefe;
+      border-left: 4px solid #0044a4;
       padding: 8px;
-      margin-top: 5px;
+      margin-top: 8px;
       font-size: 13px;
+      border-radius: 4px;
     }
-    
-    /* Tab Styles */
+    .bid-item strong {
+      color: #0044a4;
+    }
+
+    /* RFP Summaries */
+    .rfp-summary summary {
+      font-weight: bold;
+      cursor: pointer;
+      padding: 8px;
+      font-size: 15px;
+      color: #0044a4;
+      list-style: none;
+      outline: none;
+    }
+    .rfp-summary {
+      background-color: #fff;
+      margin-bottom: 15px;
+      border-radius: 6px;
+      border: 1px solid #ddd;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+      overflow: hidden;
+    }
+    .rfp-summary summary::-webkit-details-marker {
+      display: none;
+    }
+    .rfp-summary summary:hover {
+      color: #003377;
+    }
+    .rfp-summary summary::marker {
+      content: none;
+    }
+    .rfp-summary .rfp-details {
+      padding: 14px 18px;
+      background-color: #fafafa;
+      border-top: 1px solid #ddd;
+    }
+    .rfp-summary .rfp-details h3 {
+      font-size: 16px;
+      margin-top: 0;
+      color: #444;
+    }
+    .rfp-summary .rfp-details .rfp-bids {
+      margin-top: 10px;
+    }
+    .rfp-summary .rfp-details summary {
+      color: #444;
+      font-size: 14px;
+      font-weight: normal;
+      cursor: pointer;
+      margin-top: 6px;
+      padding: 6px;
+    }
+    .rfp-summary .rfp-details summary:hover {
+      color: #000;
+    }
+
+    /* Tab container */
     .tab-container {
-      margin-top: 20px;
+      margin-top: 40px;
     }
     .tabs {
       display: flex;
       border-bottom: 2px solid #0044a4;
     }
     .tab {
-      padding: 10px 20px;
+      padding: 12px 20px;
       cursor: pointer;
       background-color: #fff;
       border: 2px solid #0044a4;
       border-bottom: none;
       border-radius: 4px 4px 0 0;
-      margin-right: 10px;
+      margin-right: 8px;
       color: #0044a4;
       transition: background-color 0.2s;
+      font-weight: bold;
+      font-size: 15px;
     }
     .tab.active {
       background-color: #0044a4;
@@ -101,40 +183,43 @@
       border-radius: 0 4px 4px 4px;
       padding: 20px;
       background-color: #fff;
+      margin-bottom: 30px;
     }
-    .load-more {
-      text-align: center;
-      margin-top: 15px;
+    .section h2 {
+      color: #0044a4;
+      font-size: 18px;
+      margin-bottom: 10px;
     }
   </style>
 </head>
 <body>
   <div class="header">
     <h1>On-Chain Sealed Bid RFP</h1>
-    <p>Open RFPs &amp; Bids</p>
+    <p>Modern, Expandable UI for DAO RFPs &amp; Bids</p>
   </div>
   <div class="container">
     <div id="status">Status: Not connected.</div>
-    
+
     <!-- Open RFPs List -->
     <div class="section" id="open-rfps">
-      <h2 style="color: #0044a4;">Open RFPs</h2>
+      <h2>Open RFPs</h2>
       <div id="rfpList"></div>
       <div class="load-more">
         <button id="loadMoreRFPs-btn">Load More</button>
       </div>
     </div>
-    
-    <!-- Tab Navigation for three tabs -->
+
+    <!-- Tab Navigation: Create, Submit, Reveal -->
     <div class="tab-container">
       <div class="tabs">
         <div class="tab active" data-tab="create-tab">Create RFP</div>
         <div class="tab" data-tab="bid-tab">Submit Bid</div>
         <div class="tab" data-tab="reveal-tab">Reveal Bids</div>
       </div>
+
       <!-- Create RFP Tab -->
       <div class="tab-content" id="create-tab">
-        <h2 style="color: #0044a4;">Create RFP</h2>
+        <h2>Create RFP</h2>
         <div class="section">
           <label for="rfpTitle">Title</label>
           <input type="text" id="rfpTitle" placeholder="Enter RFP title" />
@@ -154,9 +239,10 @@
         <button id="createRFP-btn">Create RFP</button>
         <p>New RFP ID: <span id="rfpIdOutput">N/A</span></p>
       </div>
+
       <!-- Submit Bid Tab -->
       <div class="tab-content" id="bid-tab" style="display: none;">
-        <h2 style="color: #0044a4;">Submit a Bid</h2>
+        <h2>Submit a Bid</h2>
         <div class="section">
           <label for="rfpIdForBid">RFP ID</label>
           <input type="number" id="rfpIdForBid" placeholder="Enter RFP ID" />
@@ -173,9 +259,10 @@
         <button id="submitBid-btn">Submit Bid On-chain</button>
         <p>Bid ID: <span id="bidIdOutput">N/A</span></p>
       </div>
+
       <!-- Reveal Bids Tab -->
       <div class="tab-content" id="reveal-tab" style="display: none;">
-        <h2 style="color: #0044a4;">Reveal Bids</h2>
+        <h2>Reveal Bids</h2>
         <div class="section">
           <label for="rfpIdForReveal">RFP ID</label>
           <input type="number" id="rfpIdForReveal" placeholder="Enter RFP ID" />

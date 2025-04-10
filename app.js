@@ -21,19 +21,25 @@ const rfpBatchSize = 5;
 let CONTRACT_ADDRESS, CONTRACT_ABI, SHUTTER_API_BASE, REGISTRY_ADDRESS;
 
 // ======================
-// Markdown Helper Function
+// Helper Functions for Expandable Text
 // ======================
 function createMarkdownDetails(text, maxLength = 200) {
   if (!text) return "";
-  // Use marked.parse for full markdown conversion
-  const fullHTML = marked.parse(text);
   if (text.length <= maxLength) {
-    return fullHTML;
-  } else {
-    const snippet = text.substring(0, maxLength) + " ...";
-    // Use marked.parseInline for inline markdown in summary
-    return `<details><summary>${marked.parseInline(snippet)}</summary>${fullHTML}</details>`;
+    return marked.parse(text);
   }
+  const snippet = text.substring(0, maxLength) + " [Click to expand]";
+  const fullHTML = marked.parse(text);
+  return `<details class="expandable-text"><summary>${marked.parseInline(snippet)}</summary>${fullHTML}</details>`;
+}
+
+function createExpandableText(text, maxLength = 100) {
+  if (!text) return "";
+  if (text.length <= maxLength) {
+    return text;
+  }
+  const snippet = text.substring(0, maxLength) + " [Click to expand]";
+  return `<details class="expandable-text"><summary>${snippet}</summary><pre>${text}</pre></details>`;
 }
 
 // ======================
@@ -73,7 +79,7 @@ export async function connectWallet() {
         chainName: 'Gnosis Chain',
         nativeCurrency: { name: 'XDAI', symbol: 'XDAI', decimals: 18 },
         rpcUrls: ['https://rpc.gnosischain.com'],
-        blockExplorerUrls: ['https://gnosisscan.io'],
+        blockExplorerUrls: ['https://gnosisscan.io']
       };
       try {
         await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [gnosisChainParams] });
@@ -159,7 +165,7 @@ async function encryptBidForRFP() {
     setStatus("Encrypting your bid...");
     const bidHex = "0x" + Buffer.from(bidText, "utf8").toString("hex");
     encryptedCiphertext = await shutterEncryptPrivateKey(bidHex, encryptionKeyObj, null);
-    document.getElementById("ciphertextOutput").textContent = encryptedCiphertext;
+    document.getElementById("ciphertextOutput").innerHTML = createExpandableText(encryptedCiphertext, 100);
     setStatus("Bid encryption complete!");
   } catch (err) {
     console.error("encryptBidForRFP error:", err);
@@ -190,7 +196,7 @@ async function submitBid() {
     const rfp = await contract.rfps(rfpId);
     const bidId = rfp.bidCount.sub(1).toNumber();
     document.getElementById("bidIdOutput").textContent = bidId.toString();
-    loadRFPs(true); // Update list
+    loadRFPs(true);
   } catch (err) {
     console.error("submitBid error:", err);
     setStatus(`Error submitting bid: ${err.message}`);
@@ -217,7 +223,6 @@ async function revealAllBids() {
       params: { identity: encryptionKeyObj.identity, registry: REGISTRY_ADDRESS }
     });
     console.log("Decryption key response:", keyResp.data);
-    
     const finalDecryptionKey = keyResp.data?.message?.decryption_key;
     if (!finalDecryptionKey) {
       setStatus("Decryption key not available yet!");
@@ -241,9 +246,8 @@ async function revealAllBids() {
     console.log("Reveal-all tx sent:", tx);
     await tx.wait();
     setStatus(`All bids for RFP ${rfpId} revealed successfully!`);
-    // Render revealed bids in markdown with expand/collapse support.
     document.getElementById("revealedBidsOutput").innerHTML = plaintextBids.map(text => createMarkdownDetails(text)).join("<hr>");
-    loadRFPs(true); // Refresh list
+    loadRFPs(true);
   } catch (err) {
     console.error("revealAllBids error:", err);
     setStatus(`Error revealing bids: ${err.message}`);
@@ -251,7 +255,7 @@ async function revealAllBids() {
 }
 
 // ======================
-// F) Load and Display RFPs (with pagination)
+// F) Load and Display RFPs (with pagination, compact summary)
 // ======================
 async function loadRFPs(refresh = false) {
   try {
@@ -267,23 +271,38 @@ async function loadRFPs(refresh = false) {
     for (let i = startIndex; i >= endIndex; i--) {
       let rfp = await contract.rfps(i);
       const bidCount = rfp.bidCount.toNumber();
-      let rfpDiv = document.createElement("div");
-      rfpDiv.className = "list-item";
-      // Render title as plain text and description as markdown (with expand if long)
-      let html = `<strong>RFP ID:</strong> ${i}<br>
-                  <strong>Title:</strong> ${rfp.title}<br>
-                  <strong>Description:</strong> ${createMarkdownDetails(rfp.description)}<br>
-                  <strong>Submission Deadline:</strong> ${formatTimestamp(rfp.submissionDeadline.toNumber())}<br>
-                  <strong>Reveal Deadline:</strong> ${formatTimestamp(rfp.revealDeadline.toNumber())}<br>
-                  <strong>Bids:</strong> ${bidCount}<br>`;
-      rfpDiv.innerHTML = html;
+      const currentTime = Math.floor(Date.now() / 1000);
+      let status = "";
+      if (currentTime < rfp.submissionDeadline.toNumber()) {
+        status = "Open for bids";
+      } else if (currentTime < rfp.revealDeadline.toNumber()) {
+        status = "Bidding closed";
+      } else {
+        status = "Reveal available";
+      }
+      let detailsElem = document.createElement("details");
+      detailsElem.className = "rfp-summary";
+      let summaryElem = document.createElement("summary");
+      summaryElem.innerHTML = `
+        <span style="font-size:15px;">${rfp.title}</span> | 
+        <span style="color:#555;">Status:</span> <strong>${status}</strong> | 
+        <span style="color:#555;">Submit by:</span> ${formatTimestamp(rfp.submissionDeadline.toNumber())} | 
+        <span style="color:#555;">Bids:</span> ${bidCount}
+      `;
+      detailsElem.appendChild(summaryElem);
       
-      // Buttons for bidding and revealing
-      const btnContainer = document.createElement("div");
-      btnContainer.style.marginTop = "10px";
+      let detailsContent = document.createElement("div");
+      detailsContent.className = "rfp-details";
+      detailsContent.innerHTML = `
+        <h3 style="margin:0 0 10px 0;">RFP ID: ${i}</h3>
+        <p><strong>Description:</strong><br> ${createMarkdownDetails(rfp.description)}</p>
+        <p><strong>Submission Deadline:</strong> ${formatTimestamp(rfp.submissionDeadline.toNumber())}</p>
+        <p><strong>Reveal Deadline:</strong> ${formatTimestamp(rfp.revealDeadline.toNumber())}</p>
+      `;
       
-      // "Bid on this RFP" button
-      const bidBtn = document.createElement("button");
+      let btnContainer = document.createElement("div");
+      btnContainer.style.marginTop = "12px";
+      let bidBtn = document.createElement("button");
       bidBtn.textContent = "Bid on this RFP";
       bidBtn.style.marginRight = "5px";
       bidBtn.onclick = () => {
@@ -291,11 +310,8 @@ async function loadRFPs(refresh = false) {
         document.getElementById("rfpIdForBid").value = i;
       };
       btnContainer.appendChild(bidBtn);
-      
-      // "Reveal Bids" button (only if reveal deadline has passed)
-      const currentTime = Math.floor(Date.now() / 1000);
       if (currentTime >= rfp.revealDeadline.toNumber()) {
-        const revealBtn = document.createElement("button");
+        let revealBtn = document.createElement("button");
         revealBtn.textContent = "Reveal Bids";
         revealBtn.onclick = () => {
           document.querySelector('.tab[data-tab="reveal-tab"]').click();
@@ -303,29 +319,33 @@ async function loadRFPs(refresh = false) {
         };
         btnContainer.appendChild(revealBtn);
       }
-      rfpDiv.appendChild(btnContainer);
+      detailsContent.appendChild(btnContainer);
       
-      // Display bids for this RFP
+      let bidsDetails = document.createElement("details");
+      bidsDetails.className = "rfp-bids";
+      let bidsSummary = document.createElement("summary");
+      bidsSummary.textContent = "Show all bids";
+      bidsDetails.appendChild(bidsSummary);
       let bidList = document.createElement("div");
       bidList.style.marginLeft = "15px";
       for (let j = 0; j < bidCount; j++) {
         const bid = await contract.bids(i, j);
         let bidContent = "";
-        // If bid is revealed and it's plaintext, render markdown
         if (bid.revealed) {
           bidContent = createMarkdownDetails(bid.plaintextBid);
         } else {
-          bidContent = bid.encryptedBid;
+          bidContent = createExpandableText(bid.encryptedBid, 100);
         }
         let bidDiv = document.createElement("div");
         bidDiv.className = "bid-item";
-        bidDiv.innerHTML = `<strong>Bid ID:</strong> ${j}<br>
-                            <strong>Bidder:</strong> ${bid.bidder}<br>
-                            <strong>${bid.revealed ? "Plaintext Bid" : "Encrypted Bid"}:</strong> ${bidContent}`;
+        bidDiv.innerHTML = `<strong>Bid #${j}</strong> | <strong>Bidder:</strong> ${bid.bidder} | <strong>${bid.revealed ? "Plaintext" : "Encrypted"}:</strong> ${bidContent}`;
         bidList.appendChild(bidDiv);
       }
-      rfpDiv.appendChild(bidList);
-      container.appendChild(rfpDiv);
+      bidsDetails.appendChild(bidList);
+      detailsContent.appendChild(bidsDetails);
+      
+      detailsElem.appendChild(detailsContent);
+      container.appendChild(detailsElem);
     }
     rfpOffset += rfpBatchSize;
     const loadMoreBtn = document.getElementById("loadMoreRFPs-btn");
@@ -385,20 +405,25 @@ async function shutterEncryptPrivateKey(privateKeyHex, encryptionData, sigmaHex)
 // Event Listeners & Auto Initialization
 // ======================
 document.addEventListener("DOMContentLoaded", async () => {
-  // Cache bust ABI and config
   const config = await fetch("public_config.json?v=" + new Date().getTime()).then(res => res.json());
   CONTRACT_ADDRESS = config.contract_address;
   SHUTTER_API_BASE = config.shutter_api_base;
   REGISTRY_ADDRESS = config.registry_address;
   CONTRACT_ABI = await fetch("contract_abi.json?v=" + new Date().getTime()).then(res => res.json());
   
-  // Hook up tab buttons
+  // Prefill RFP creation deadlines: submission = 4 minutes from now, reveal = 5 minutes from now.
+  const now = new Date();
+  const submissionTime = new Date(now.getTime() + 4 * 60 * 1000);
+  const revealTime = new Date(now.getTime() + 5 * 60 * 1000);
+  document.getElementById("submissionDeadline").value = submissionTime.toISOString().slice(0, 16);
+  document.getElementById("rfpRevealDeadline").value = revealTime.toISOString().slice(0, 16);
+  
   document.getElementById("createRFP-btn").addEventListener("click", createRFP);
   document.getElementById("encryptBid-btn").addEventListener("click", encryptBidForRFP);
   document.getElementById("submitBid-btn").addEventListener("click", submitBid);
   document.getElementById("revealAllBids-btn").addEventListener("click", revealAllBids);
   document.getElementById("loadMoreRFPs-btn").addEventListener("click", () => loadRFPs());
-
+  
   await connectWallet();
   await loadRFPs(true);
 });
