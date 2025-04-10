@@ -11,8 +11,12 @@ let contract = null;
 
 let shutterIdentity = null;
 let encryptionData = null; // Used when creating RFPs
-let encryptedCiphertext = null; // Used for bidder’s encryption
+let encryptedCiphertext = null; // Used for bidder encryption
 let chosenRevealDeadline = null; // timestamp from RFP reveal deadline
+
+// For pagination (load newest RFPs in batches)
+let rfpOffset = 0;
+const rfpBatchSize = 5;
 
 let CONTRACT_ADDRESS, CONTRACT_ABI, SHUTTER_API_BASE, REGISTRY_ADDRESS;
 
@@ -36,7 +40,7 @@ function formatTimestamp(timestamp) {
 }
 
 // ======================
-// A) Connect Wallet
+// A) Connect Wallet (auto-called on page load)
 // ======================
 export async function connectWallet() {
   try {
@@ -48,7 +52,6 @@ export async function connectWallet() {
     provider = new ethers.providers.Web3Provider(window.ethereum);
     const network = await provider.getNetwork();
     console.log("Connected to network:", network);
-
     // Ensure wallet is on Gnosis Chain (chainId 100)
     if (network.chainId !== 100) {
       const gnosisChainParams = {
@@ -58,7 +61,6 @@ export async function connectWallet() {
         rpcUrls: ['https://rpc.gnosischain.com'],
         blockExplorerUrls: ['https://gnosisscan.io'],
       };
-
       try {
         await window.ethereum.request({
           method: 'wallet_addEthereumChain',
@@ -71,7 +73,6 @@ export async function connectWallet() {
         return;
       }
     }
-
     signer = provider.getSigner();
     contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
     setStatus("Wallet connected to Gnosis Chain!");
@@ -89,29 +90,20 @@ async function createRFP() {
   const description = document.getElementById("rfpDescription").value.trim();
   const submissionDtVal = document.getElementById("submissionDeadline").value;
   const revealDtVal = document.getElementById("rfpRevealDeadline").value;
-
   if (!title || !description || !submissionDtVal || !revealDtVal) {
     setStatus("Please fill in all fields for the RFP.");
     return;
   }
-
-  // Convert date/time to UNIX timestamps (in seconds)
   const submissionDeadline = Math.floor(new Date(submissionDtVal).getTime() / 1000);
   let revealDeadline = Math.floor(new Date(revealDtVal).getTime() / 1000);
-  // Enforce a minimum gap (e.g., reveal must be at least 60 seconds after submission)
   if (revealDeadline <= submissionDeadline + 60) {
     revealDeadline = submissionDeadline + 60;
   }
   chosenRevealDeadline = revealDeadline;
-
-  // Use Shutter to generate encryption parameters for this RFP.
-  // (Reuse your shutter identity registration flow.)
   await registerIdentity(revealDeadline);
   if (!shutterIdentity) return;
   await fetchEncryptionData();
   if (!encryptionData) return;
-
-  // We store the encryption key as a JSON string.
   const keyData = JSON.stringify(encryptionData.message);
   setStatus("Creating RFP on-chain...");
   try {
@@ -125,10 +117,13 @@ async function createRFP() {
     console.log("Transaction sent for RFP creation:", tx);
     await tx.wait();
     console.log("RFP created!");
-    const rfpCount = await contract.rfpCount();
-    const newRFPId = rfpCount.sub(1).toNumber();
+    const rfpCountBN = await contract.rfpCount();
+    const newRFPId = rfpCountBN.sub(1).toNumber();
     document.getElementById("rfpIdOutput").textContent = newRFPId.toString();
     setStatus(`RFP created successfully with ID ${newRFPId}`);
+    // Reset pagination so that the newest RFP appears on top on refresh.
+    rfpOffset = 0;
+    loadRFPs(true);  // refresh the list completely
   } catch (err) {
     console.error("createRFP error:", err);
     setStatus(`Error creating RFP: ${err.message}`);
@@ -147,7 +142,6 @@ async function encryptBidForRFP() {
   }
   setStatus("Fetching RFP encryption key...");
   try {
-    // Get the encryption key stored on-chain for the RFP
     const keyData = await contract.getRFPEncryptionKey(rfpId);
     if (!keyData) {
       setStatus("Encryption key not found for this RFP.");
@@ -188,6 +182,7 @@ async function submitBid() {
     const rfp = await contract.rfps(rfpId);
     const bidId = rfp.bidCount.sub(1).toNumber();
     document.getElementById("bidIdOutput").textContent = bidId.toString();
+    loadRFPs(true); // Refresh RFP list to update bid counts
   } catch (err) {
     console.error("submitBid error:", err);
     setStatus(`Error submitting bid: ${err.message}`);
@@ -206,7 +201,6 @@ async function revealBid() {
   }
   setStatus("Revealing bid on-chain...");
   try {
-    // For simplicity, we assume the bidder reuses the plaintext bid input they had entered
     const plaintextBid = document.getElementById("bidText").value.trim();
     if (!plaintextBid) {
       setStatus("Plaintext bid not found. Please re-enter your bid details.");
@@ -217,6 +211,7 @@ async function revealBid() {
     await tx.wait();
     setStatus("Bid revealed successfully!");
     document.getElementById("decryptedOutput").textContent = plaintextBid;
+    loadRFPs(true); // Refresh list to update revealed bids
   } catch (err) {
     console.error("revealBid error:", err);
     setStatus(`Error revealing bid: ${err.message}`);
@@ -224,37 +219,37 @@ async function revealBid() {
 }
 
 // ======================
-// F) Load and Display All RFPs with Their Bids
-// ======================
-async function loadRFPs() {
+// F) Load and Display RFPs (with pagination)
+// If 'refresh' is true, the list is cleared and pagination restarted.
+async function loadRFPs(refresh = false) {
   try {
-    let rfpCountBN = await contract.rfpCount();
-    const rfpCount = rfpCountBN.toNumber();
+    const rfpCountBN = await contract.rfpCount();
+    const totalRFPs = rfpCountBN.toNumber();
     const container = document.getElementById("rfpList");
-    container.innerHTML = ""; // Clear previous list
-    for (let i = 0; i < rfpCount; i++) {
+    if (refresh) {
+      container.innerHTML = "";
+      rfpOffset = 0;
+    }
+    // Calculate start and end indices (newest first)
+    let startIndex = totalRFPs - 1 - rfpOffset;
+    let endIndex = Math.max(startIndex - rfpBatchSize + 1, 0);
+    for (let i = startIndex; i >= endIndex; i--) {
       let rfp = await contract.rfps(i);
-      // rfp: [creator, title, description, submissionDeadline, revealDeadline, encryptionKey, bidCount]
       const bidCount = rfp.bidCount.toNumber();
-      const rfpDiv = document.createElement("div");
-      rfpDiv.style.border = "1px solid #aaa";
-      rfpDiv.style.padding = "10px";
-      rfpDiv.style.marginBottom = "10px";
-
+      let rfpDiv = document.createElement("div");
+      rfpDiv.className = "list-item";
       let html = `<strong>RFP ID:</strong> ${i}<br>
                   <strong>Title:</strong> ${rfp.title}<br>
                   <strong>Description:</strong> ${rfp.description}<br>
                   <strong>Submission Deadline:</strong> ${formatTimestamp(rfp.submissionDeadline.toNumber())}<br>
                   <strong>Reveal Deadline:</strong> ${formatTimestamp(rfp.revealDeadline.toNumber())}<br>
-                  <strong>Number of Bids:</strong> ${bidCount}<br>`;
+                  <strong>Bids:</strong> ${bidCount}<br>`;
       rfpDiv.innerHTML = html;
-
-      // Create sub-list for bids
-      const bidList = document.createElement("div");
-      bidList.style.marginLeft = "20px";
+      // Create a sub-list for bids
+      let bidList = document.createElement("div");
+      bidList.style.marginLeft = "15px";
       for (let j = 0; j < bidCount; j++) {
         const bid = await contract.bids(i, j);
-        // bid: [bidder, encryptedBid, revealed, plaintextBid]
         const currentTime = Math.floor(Date.now() / 1000);
         let bidContent = "";
         if (currentTime >= rfp.revealDeadline.toNumber() && bid.revealed) {
@@ -262,10 +257,8 @@ async function loadRFPs() {
         } else {
           bidContent = bid.encryptedBid;
         }
-        const bidDiv = document.createElement("div");
-        bidDiv.style.border = "1px dashed #888";
-        bidDiv.style.padding = "5px";
-        bidDiv.style.marginBottom = "5px";
+        let bidDiv = document.createElement("div");
+        bidDiv.className = "bid-item";
         bidDiv.innerHTML = `<strong>Bid ID:</strong> ${j}<br>
                             <strong>Bidder:</strong> ${bid.bidder}<br>
                             <strong>${(currentTime >= rfp.revealDeadline.toNumber() && bid.revealed) ? "Plaintext Bid" : "Encrypted Bid"}:</strong> ${bidContent}`;
@@ -274,6 +267,15 @@ async function loadRFPs() {
       rfpDiv.appendChild(bidList);
       container.appendChild(rfpDiv);
     }
+    // Update pagination offset
+    rfpOffset += rfpBatchSize;
+    // Show or hide the "Load More" button
+    const loadMoreBtn = document.getElementById("loadMoreRFPs-btn");
+    if (rfpOffset >= totalRFPs) {
+      loadMoreBtn.style.display = "none";
+    } else {
+      loadMoreBtn.style.display = "block";
+    }
   } catch (err) {
     console.error("loadRFPs error:", err);
     setStatus("Error loading RFPs: " + err.message);
@@ -281,7 +283,7 @@ async function loadRFPs() {
 }
 
 // ======================
-// Shutter Integration Functions (Reused from your Shutter Predict code)
+// Shutter Integration Functions (Reuse from Shutter Predict)
 // ======================
 async function registerIdentity(decryptionTimestamp) {
   const identityPrefix = generateRandomHex(32);
@@ -326,7 +328,7 @@ async function shutterEncryptPrivateKey(privateKeyHex, encryptionData, sigmaHex)
 }
 
 // ======================
-// Event Listeners
+// Event Listeners & Auto Initialization
 // ======================
 document.addEventListener("DOMContentLoaded", async () => {
   // Load configuration and ABI first
@@ -336,12 +338,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   REGISTRY_ADDRESS = config.registry_address;
   
   CONTRACT_ABI = await fetch("contract_abi.json").then(res => res.json());
-
-  // Hook up button event listeners for our functions
+  
+  // Hook up button event listeners
   document.getElementById("createRFP-btn").addEventListener("click", createRFP);
   document.getElementById("encryptBid-btn").addEventListener("click", encryptBidForRFP);
   document.getElementById("submitBid-btn").addEventListener("click", submitBid);
   document.getElementById("revealBid-btn").addEventListener("click", revealBid);
-  document.getElementById("refreshRFPs-btn").addEventListener("click", loadRFPs);
+  document.getElementById("loadMoreRFPs-btn").addEventListener("click", () => loadRFPs());
+
+  // Automatically connect wallet and load the first batch of RFPs
+  await connectWallet();
+  await loadRFPs(true); // Refresh and load newest 5
 });
 window.connectWallet = connectWallet;

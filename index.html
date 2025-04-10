@@ -102,6 +102,10 @@
       padding: 20px;
       background-color: #fff;
     }
+    .load-more {
+      text-align: center;
+      margin-top: 15px;
+    }
   </style>
 </head>
 <body>
@@ -111,13 +115,14 @@
   </div>
   <div class="container">
     <div id="status">Status: Not connected.</div>
-    <button onclick="connectWallet()">Connect Wallet</button>
-
+    
     <!-- Open RFPs List -->
     <div class="section" id="open-rfps">
       <h2 style="color: #0044a4;">Open RFPs</h2>
-      <button id="refreshRFPs-btn">Refresh RFP List</button>
       <div id="rfpList"></div>
+      <div class="load-more">
+        <button id="loadMoreRFPs-btn">Load More</button>
+      </div>
     </div>
 
     <!-- Tab Navigation for RFP Creation and Bid Submission -->
