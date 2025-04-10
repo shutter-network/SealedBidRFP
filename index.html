@@ -16,20 +16,43 @@
       background-color: #f8f9fa;
       color: #333;
     }
+    /* Updated Header */
     .header {
+      position: relative;
       background-color: #0044a4;
-      color: #fff;
-      padding: 24px;
-      text-align: center;
+      padding: 20px 0;
       margin-bottom: 20px;
     }
-    .header h1 {
-      margin: 0 0 10px 0;
-      font-size: 28px;
+    /* Left group: logo + text, centered as a group */
+    .header-left-group {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      max-width: 800px;
+      margin: 0 auto;
     }
-    .header p {
-      margin: 0;
-      font-size: 16px;
+    .header-left-group img {
+      height: 95px;
+      width: auto;
+      margin-right: 12px;
+    }
+    .header-left-group .header-text {
+      font-family: "Arial Black", Arial, sans-serif;
+      font-size: 28px;
+      color: #fff;
+      text-align: left;
+      line-height: 1.2;
+    }
+    /* Right logo: positioned at the right edge of the viewport */
+    .header-right {
+      position: absolute;
+      right: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+    .header-right img {
+      height: 320px; /* Larger logo */
+      width: auto;
     }
     .container {
       width: 90%;
@@ -100,7 +123,6 @@
     .bid-item strong {
       color: #0044a4;
     }
-
     /* RFP Summaries */
     .rfp-summary {
       background-color: #fff;
@@ -111,12 +133,10 @@
       overflow: hidden;
       padding: 0;
     }
-
-    /* Hide default marker, use an arrow via pseudo-element. */
+    /* Hide default marker, add custom arrow */
     .rfp-summary summary::-webkit-details-marker {
       display: none;
     }
-
     .rfp-summary summary {
       list-style: none;
       outline: none;
@@ -129,24 +149,19 @@
       cursor: pointer;
       position: relative;
     }
-
-    /* Use CSS content to show an arrow for expand/collapse */
     .rfp-summary summary::before {
       content: "▶ ";
       color: #0044a4;
       margin-right: 4px;
       transition: transform 0.2s;
     }
-    /* Flip the arrow when open */
     .rfp-summary[open] summary::before {
       content: "▼ ";
       transform: rotate(90deg);
     }
-
     .rfp-summary summary:hover {
       color: #003377;
     }
-
     .rfp-summary .rfp-details {
       padding: 14px 18px;
       background-color: #fafafa;
@@ -157,13 +172,9 @@
       margin-top: 0;
       color: #444;
     }
-
-    /* Nested Bids Expand */
     .rfp-summary .rfp-details .rfp-bids {
       margin-top: 10px;
     }
-
-    /* The nested summary for "Show all bids" also gets an arrow. */
     .rfp-summary .rfp-details .rfp-bids summary {
       color: #444;
       font-size: 14px;
@@ -186,8 +197,7 @@
     .rfp-summary .rfp-details .rfp-bids summary:hover {
       color: #000;
     }
-
-    /* Tab container */
+    /* Tabs */
     .tab-container {
       margin-top: 40px;
     }
@@ -227,10 +237,21 @@
   </style>
 </head>
 <body>
+  <!-- Updated Header -->
   <div class="header">
-    <h1>On-Chain Sealed Bid RFP</h1>
-    <p>Modern, Expandable UI for DAO RFPs &amp; Bids</p>
+    <div class="header-left-group">
+      <img src="logo.png" alt="Logo" />
+      <div class="header-text">
+        SHUTTER<br>
+        SEALED BID<br>
+        RFPs
+      </div>
+    </div>
+    <div class="header-right">
+      <img src="powered_shutter_api.png" alt="Powered by Shutter API" />
+    </div>
   </div>
+
   <div class="container">
     <div id="status">Status: Not connected.</div>
 
