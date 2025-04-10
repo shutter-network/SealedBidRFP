@@ -10,11 +10,11 @@ let signer = null;
 let contract = null;
 
 let shutterIdentity = null;
-let encryptionData = null; // Used when creating RFPs
+let encryptionData = null; // Used during RFP creation
 let encryptedCiphertext = null; // Used for bidder encryption
-let chosenRevealDeadline = null; // timestamp from RFP reveal deadline
+let chosenRevealDeadline = null; // UNIX timestamp for reveal deadline
 
-// For pagination (load newest RFPs in batches)
+// Pagination for RFP list
 let rfpOffset = 0;
 const rfpBatchSize = 5;
 
@@ -24,15 +24,14 @@ let CONTRACT_ADDRESS, CONTRACT_ABI, SHUTTER_API_BASE, REGISTRY_ADDRESS;
 // Utility Functions
 // ======================
 function setStatus(msg) {
+  console.log("STATUS:", msg);
   document.getElementById("status").textContent = "Status: " + msg;
 }
 
 function generateRandomHex(sizeInBytes) {
   const bytes = new Uint8Array(sizeInBytes);
   window.crypto.getRandomValues(bytes);
-  return "0x" + Array.from(bytes)
-    .map(b => b.toString(16).padStart(2, "0"))
-    .join("");
+  return "0x" + Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
 function formatTimestamp(timestamp) {
@@ -40,7 +39,7 @@ function formatTimestamp(timestamp) {
 }
 
 // ======================
-// A) Connect Wallet (auto-called on page load)
+// A) Connect Wallet (auto on page load)
 // ======================
 export async function connectWallet() {
   try {
@@ -52,7 +51,6 @@ export async function connectWallet() {
     provider = new ethers.providers.Web3Provider(window.ethereum);
     const network = await provider.getNetwork();
     console.log("Connected to network:", network);
-    // Ensure wallet is on Gnosis Chain (chainId 100)
     if (network.chainId !== 100) {
       const gnosisChainParams = {
         chainId: '0x64',
@@ -62,28 +60,35 @@ export async function connectWallet() {
         blockExplorerUrls: ['https://gnosisscan.io'],
       };
       try {
-        await window.ethereum.request({
-          method: 'wallet_addEthereumChain',
-          params: [gnosisChainParams],
-        });
+        await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [gnosisChainParams] });
         provider = new ethers.providers.Web3Provider(window.ethereum);
       } catch (switchError) {
         console.error("Failed to switch to Gnosis Chain:", switchError);
-        setStatus("Please connect to the Gnosis Chain network.");
+        setStatus("Please connect to Gnosis Chain.");
         return;
       }
     }
     signer = provider.getSigner();
     contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+    
+    // Log loaded ABI (for debugging)
+    console.log("Loaded ABI:", CONTRACT_ABI);
+    // Check if revealAllBids is in the ABI
+    const revealAllEntries = CONTRACT_ABI.filter(entry => entry.name === "revealAllBids");
+    console.log("Revealing all bids ABI entry:", revealAllEntries);
+    
+    // Log available contract functions from contract instance
+    console.log("Contract available functions:", Object.keys(contract.functions));
+    
     setStatus("Wallet connected to Gnosis Chain!");
   } catch (err) {
     console.error("connectWallet error:", err);
-    setStatus("Error connecting wallet, please refresh the page.");
+    setStatus("Error connecting wallet; please refresh the page.");
   }
 }
 
 // ======================
-// B) RFP Creation (For RFP Creator)
+// B) RFP Creation
 // ======================
 async function createRFP() {
   const title = document.getElementById("rfpTitle").value.trim();
@@ -107,13 +112,7 @@ async function createRFP() {
   const keyData = JSON.stringify(encryptionData.message);
   setStatus("Creating RFP on-chain...");
   try {
-    const tx = await contract.createRFP(
-      title,
-      description,
-      submissionDeadline,
-      revealDeadline,
-      keyData
-    );
+    const tx = await contract.createRFP(title, description, submissionDeadline, revealDeadline, keyData);
     console.log("Transaction sent for RFP creation:", tx);
     await tx.wait();
     console.log("RFP created!");
@@ -121,9 +120,8 @@ async function createRFP() {
     const newRFPId = rfpCountBN.sub(1).toNumber();
     document.getElementById("rfpIdOutput").textContent = newRFPId.toString();
     setStatus(`RFP created successfully with ID ${newRFPId}`);
-    // Reset pagination so that the newest RFP appears on top on refresh.
-    rfpOffset = 0;
-    loadRFPs(true);  // refresh the list completely
+    rfpOffset = 0; // Reset pagination
+    loadRFPs(true);
   } catch (err) {
     console.error("createRFP error:", err);
     setStatus(`Error creating RFP: ${err.message}`);
@@ -131,7 +129,7 @@ async function createRFP() {
 }
 
 // ======================
-// C) Bidder Flow: Encrypt Bid for RFP
+// C) Encrypt Bid for RFP
 // ======================
 async function encryptBidForRFP() {
   const rfpId = document.getElementById("rfpIdForBid").value;
@@ -160,7 +158,7 @@ async function encryptBidForRFP() {
 }
 
 // ======================
-// D) Submit Bid (On-chain) for a given RFP
+// D) Submit Bid (On-chain) for an RFP
 // ======================
 async function submitBid() {
   const rfpId = document.getElementById("rfpIdForBid").value;
@@ -182,7 +180,7 @@ async function submitBid() {
     const rfp = await contract.rfps(rfpId);
     const bidId = rfp.bidCount.sub(1).toNumber();
     document.getElementById("bidIdOutput").textContent = bidId.toString();
-    loadRFPs(true); // Refresh RFP list to update bid counts
+    loadRFPs(true); // Update list
   } catch (err) {
     console.error("submitBid error:", err);
     setStatus(`Error submitting bid: ${err.message}`);
@@ -190,37 +188,67 @@ async function submitBid() {
 }
 
 // ======================
-// E) Reveal Bid (Bidder reveals their bid after reveal deadline)
+// E) Reveal All Bids for a given RFP (Batch reveal)
 // ======================
-async function revealBid() {
+async function revealAllBids() {
   const rfpId = document.getElementById("rfpIdForReveal").value;
-  const bidId = document.getElementById("bidIdForReveal").value;
-  if (!rfpId || !bidId) {
-    setStatus("Please enter both the RFP ID and Bid ID.");
+  if (!rfpId) {
+    setStatus("Please enter the RFP ID.");
     return;
   }
-  setStatus("Revealing bid on-chain...");
+  setStatus("Revealing all bids on-chain...");
   try {
-    const plaintextBid = document.getElementById("bidText").value.trim();
-    if (!plaintextBid) {
-      setStatus("Plaintext bid not found. Please re-enter your bid details.");
+    console.log("Available functions:", Object.keys(contract.functions));
+    
+    // Retrieve RFP encryption key from the contract
+    const rfp = await contract.rfps(rfpId);
+    const encryptionKeyObj = JSON.parse(rfp.encryptionKey);
+    console.log("Retrieved encryptionKeyObj:", encryptionKeyObj);
+    
+    // Get the decryption key via Shutter API
+    const keyResp = await axios.get(`${SHUTTER_API_BASE}/get_decryption_key`, {
+      params: { identity: encryptionKeyObj.identity, registry: REGISTRY_ADDRESS }
+    });
+    console.log("Decryption key response:", keyResp.data);
+    
+    const finalDecryptionKey = keyResp.data?.message?.decryption_key;
+    if (!finalDecryptionKey) {
+      setStatus("Decryption key not available yet!");
       return;
     }
-    const tx = await contract.revealBid(rfpId, bidId, plaintextBid);
-    console.log("Reveal tx sent:", tx);
+    
+    // Loop over all bids in the RFP and decrypt any not yet revealed
+    const bidCount = rfp.bidCount.toNumber();
+    let plaintextBids = [];
+    for (let j = 0; j < bidCount; j++) {
+      const bid = await contract.bids(rfpId, j);
+      if (bid.encryptedBid === "0x" || bid.revealed) {
+        plaintextBids.push(bid.plaintextBid);
+      } else {
+        const decryptedHex = await window.shutter.decrypt(bid.encryptedBid, finalDecryptionKey);
+        const decryptedText = Buffer.from(decryptedHex.slice(2), "hex").toString("utf8");
+        plaintextBids.push(decryptedText);
+      }
+    }
+    console.log("Plaintext bids to reveal:", plaintextBids);
+    console.log("Calling revealAllBids with rfpId:", rfpId, "and plaintextBids:", plaintextBids);
+    
+    // Call the contract's batch reveal function
+    const tx = await contract.revealAllBids(rfpId, plaintextBids);
+    console.log("Reveal-all tx sent:", tx);
     await tx.wait();
-    setStatus("Bid revealed successfully!");
-    document.getElementById("decryptedOutput").textContent = plaintextBid;
-    loadRFPs(true); // Refresh list to update revealed bids
+    setStatus(`All bids for RFP ${rfpId} revealed successfully!`);
+    document.getElementById("revealedBidsOutput").textContent = JSON.stringify(plaintextBids, null, 2);
+    loadRFPs(true); // Refresh list
   } catch (err) {
-    console.error("revealBid error:", err);
-    setStatus(`Error revealing bid: ${err.message}`);
+    console.error("revealAllBids error:", err);
+    setStatus(`Error revealing bids: ${err.message}`);
   }
 }
 
 // ======================
 // F) Load and Display RFPs (with pagination)
-// If 'refresh' is true, the list is cleared and pagination restarted.
+// ======================
 async function loadRFPs(refresh = false) {
   try {
     const rfpCountBN = await contract.rfpCount();
@@ -230,7 +258,6 @@ async function loadRFPs(refresh = false) {
       container.innerHTML = "";
       rfpOffset = 0;
     }
-    // Calculate start and end indices (newest first)
     let startIndex = totalRFPs - 1 - rfpOffset;
     let endIndex = Math.max(startIndex - rfpBatchSize + 1, 0);
     for (let i = startIndex; i >= endIndex; i--) {
@@ -245,7 +272,6 @@ async function loadRFPs(refresh = false) {
                   <strong>Reveal Deadline:</strong> ${formatTimestamp(rfp.revealDeadline.toNumber())}<br>
                   <strong>Bids:</strong> ${bidCount}<br>`;
       rfpDiv.innerHTML = html;
-      // Create a sub-list for bids
       let bidList = document.createElement("div");
       bidList.style.marginLeft = "15px";
       for (let j = 0; j < bidCount; j++) {
@@ -267,15 +293,9 @@ async function loadRFPs(refresh = false) {
       rfpDiv.appendChild(bidList);
       container.appendChild(rfpDiv);
     }
-    // Update pagination offset
     rfpOffset += rfpBatchSize;
-    // Show or hide the "Load More" button
     const loadMoreBtn = document.getElementById("loadMoreRFPs-btn");
-    if (rfpOffset >= totalRFPs) {
-      loadMoreBtn.style.display = "none";
-    } else {
-      loadMoreBtn.style.display = "block";
-    }
+    loadMoreBtn.style.display = (rfpOffset >= totalRFPs) ? "none" : "block";
   } catch (err) {
     console.error("loadRFPs error:", err);
     setStatus("Error loading RFPs: " + err.message);
@@ -283,7 +303,7 @@ async function loadRFPs(refresh = false) {
 }
 
 // ======================
-// Shutter Integration Functions (Reuse from Shutter Predict)
+// Shutter Integration Functions
 // ======================
 async function registerIdentity(decryptionTimestamp) {
   const identityPrefix = generateRandomHex(32);
@@ -331,23 +351,19 @@ async function shutterEncryptPrivateKey(privateKeyHex, encryptionData, sigmaHex)
 // Event Listeners & Auto Initialization
 // ======================
 document.addEventListener("DOMContentLoaded", async () => {
-  // Load configuration and ABI first
   const config = await fetch("public_config.json").then(res => res.json());
   CONTRACT_ADDRESS = config.contract_address;
   SHUTTER_API_BASE = config.shutter_api_base;
   REGISTRY_ADDRESS = config.registry_address;
+  CONTRACT_ABI = await fetch("contract_abi.json?v=" + new Date().getTime()).then(res => res.json());
   
-  CONTRACT_ABI = await fetch("contract_abi.json").then(res => res.json());
-  
-  // Hook up button event listeners
   document.getElementById("createRFP-btn").addEventListener("click", createRFP);
   document.getElementById("encryptBid-btn").addEventListener("click", encryptBidForRFP);
   document.getElementById("submitBid-btn").addEventListener("click", submitBid);
-  document.getElementById("revealBid-btn").addEventListener("click", revealBid);
+  document.getElementById("revealAllBids-btn").addEventListener("click", revealAllBids);
   document.getElementById("loadMoreRFPs-btn").addEventListener("click", () => loadRFPs());
 
-  // Automatically connect wallet and load the first batch of RFPs
   await connectWallet();
-  await loadRFPs(true); // Refresh and load newest 5
+  await loadRFPs(true);
 });
 window.connectWallet = connectWallet;

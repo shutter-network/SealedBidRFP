@@ -4,7 +4,7 @@ pragma solidity ^0.8.17;
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract RFPContract is Ownable {
-    // Pass msg.sender to Ownable’s constructor.
+    // Pass msg.sender as the initial owner when deploying the contract.
     constructor() Ownable(msg.sender) {}
 
     struct RFP {
@@ -13,7 +13,7 @@ contract RFPContract is Ownable {
         string description;
         uint256 submissionDeadline;
         uint256 revealDeadline;
-        string encryptionKey; // The encryption parameters stored as a JSON string
+        string encryptionKey; // Encryption parameters as a JSON string
         uint256 bidCount;
     }
     
@@ -49,7 +49,7 @@ contract RFPContract is Ownable {
         string plaintextBid
     );
     
-    // Create a new RFP; encryptionKey is provided as a JSON string.
+    // Create a new RFP
     function createRFP(
         string calldata title,
         string calldata description,
@@ -73,7 +73,7 @@ contract RFPContract is Ownable {
         return id;
     }
     
-    // Submit a sealed bid to an existing RFP.
+    // Submit a sealed bid to an RFP
     function submitBid(uint256 rfpId, bytes calldata encryptedBid) external {
         RFP storage rfp = rfps[rfpId];
         require(block.timestamp <= rfp.submissionDeadline, "Submission period is over");
@@ -88,18 +88,23 @@ contract RFPContract is Ownable {
         emit BidSubmitted(rfpId, bidId, msg.sender, encryptedBid);
     }
     
-    // Reveal a bid once the reveal deadline has passed.
-    function revealBid(uint256 rfpId, uint256 bidId, string calldata plaintextBid) external {
+    // Reveal all bids for a particular RFP in a single transaction.
+    function revealAllBids(uint256 rfpId, string[] calldata plaintextBids) external {
         RFP storage rfp = rfps[rfpId];
         require(block.timestamp >= rfp.revealDeadline, "Reveal period not started");
-        Bid storage bid = bids[rfpId][bidId];
-        require(!bid.revealed, "Bid already revealed");
-        bid.plaintextBid = plaintextBid;
-        bid.revealed = true;
-        emit BidRevealed(rfpId, bidId, msg.sender, plaintextBid);
+        uint256 count = rfp.bidCount;
+        require(plaintextBids.length == count, "Incorrect number of bids provided");
+        for (uint256 i = 0; i < count; i++) {
+            Bid storage bid = bids[rfpId][i];
+            if (!bid.revealed) {
+                bid.plaintextBid = plaintextBids[i];
+                bid.revealed = true;
+                emit BidRevealed(rfpId, i, bid.bidder, plaintextBids[i]);
+            }
+        }
     }
     
-    // Helper to retrieve the RFP encryption key.
+    // Getter for RFP encryption key.
     function getRFPEncryptionKey(uint256 rfpId) external view returns (string memory) {
         return rfps[rfpId].encryptionKey;
     }
