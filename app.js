@@ -71,13 +71,8 @@ export async function connectWallet() {
     signer = provider.getSigner();
     contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
     
-    // Log loaded ABI (for debugging)
+    // Log loaded ABI & available functions for debugging
     console.log("Loaded ABI:", CONTRACT_ABI);
-    // Check if revealAllBids is in the ABI
-    const revealAllEntries = CONTRACT_ABI.filter(entry => entry.name === "revealAllBids");
-    console.log("Revealing all bids ABI entry:", revealAllEntries);
-    
-    // Log available contract functions from contract instance
     console.log("Contract available functions:", Object.keys(contract.functions));
     
     setStatus("Wallet connected to Gnosis Chain!");
@@ -199,25 +194,19 @@ async function revealAllBids() {
   setStatus("Revealing all bids on-chain...");
   try {
     console.log("Available functions:", Object.keys(contract.functions));
-    
-    // Retrieve RFP encryption key from the contract
     const rfp = await contract.rfps(rfpId);
     const encryptionKeyObj = JSON.parse(rfp.encryptionKey);
     console.log("Retrieved encryptionKeyObj:", encryptionKeyObj);
     
-    // Get the decryption key via Shutter API
     const keyResp = await axios.get(`${SHUTTER_API_BASE}/get_decryption_key`, {
       params: { identity: encryptionKeyObj.identity, registry: REGISTRY_ADDRESS }
     });
     console.log("Decryption key response:", keyResp.data);
-    
     const finalDecryptionKey = keyResp.data?.message?.decryption_key;
     if (!finalDecryptionKey) {
       setStatus("Decryption key not available yet!");
       return;
     }
-    
-    // Loop over all bids in the RFP and decrypt any not yet revealed
     const bidCount = rfp.bidCount.toNumber();
     let plaintextBids = [];
     for (let j = 0; j < bidCount; j++) {
@@ -232,8 +221,6 @@ async function revealAllBids() {
     }
     console.log("Plaintext bids to reveal:", plaintextBids);
     console.log("Calling revealAllBids with rfpId:", rfpId, "and plaintextBids:", plaintextBids);
-    
-    // Call the contract's batch reveal function
     const tx = await contract.revealAllBids(rfpId, plaintextBids);
     console.log("Reveal-all tx sent:", tx);
     await tx.wait();
@@ -272,6 +259,37 @@ async function loadRFPs(refresh = false) {
                   <strong>Reveal Deadline:</strong> ${formatTimestamp(rfp.revealDeadline.toNumber())}<br>
                   <strong>Bids:</strong> ${bidCount}<br>`;
       rfpDiv.innerHTML = html;
+      
+      // Append Bid and Reveal Buttons
+      const btnContainer = document.createElement("div");
+      btnContainer.style.marginTop = "10px";
+      
+      // "Bid on this RFP" button:
+      const bidBtn = document.createElement("button");
+      bidBtn.textContent = "Bid on this RFP";
+      bidBtn.style.marginRight = "5px";
+      bidBtn.onclick = () => {
+        // Switch to Submit Bid tab and prefill the RFP ID
+        document.querySelector('.tab[data-tab="bid-tab"]').click();
+        document.getElementById("rfpIdForBid").value = i;
+      };
+      btnContainer.appendChild(bidBtn);
+      
+      // "Reveal Bids" button (only show if current time >= revealDeadline)
+      const currentTime = Math.floor(Date.now() / 1000);
+      if (currentTime >= rfp.revealDeadline.toNumber()) {
+        const revealBtn = document.createElement("button");
+        revealBtn.textContent = "Reveal Bids";
+        revealBtn.onclick = () => {
+          document.querySelector('.tab[data-tab="reveal-tab"]').click();
+          document.getElementById("rfpIdForReveal").value = i;
+        };
+        btnContainer.appendChild(revealBtn);
+      }
+      
+      rfpDiv.appendChild(btnContainer);
+      
+      // Append existing bids list
       let bidList = document.createElement("div");
       bidList.style.marginLeft = "15px";
       for (let j = 0; j < bidCount; j++) {
@@ -351,7 +369,7 @@ async function shutterEncryptPrivateKey(privateKeyHex, encryptionData, sigmaHex)
 // Event Listeners & Auto Initialization
 // ======================
 document.addEventListener("DOMContentLoaded", async () => {
-  const config = await fetch("public_config.json").then(res => res.json());
+  const config = await fetch("public_config.json?v=" + new Date().getTime()).then(res => res.json());
   CONTRACT_ADDRESS = config.contract_address;
   SHUTTER_API_BASE = config.shutter_api_base;
   REGISTRY_ADDRESS = config.registry_address;
