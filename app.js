@@ -21,6 +21,22 @@ const rfpBatchSize = 5;
 let CONTRACT_ADDRESS, CONTRACT_ABI, SHUTTER_API_BASE, REGISTRY_ADDRESS;
 
 // ======================
+// Markdown Helper Function
+// ======================
+function createMarkdownDetails(text, maxLength = 200) {
+  if (!text) return "";
+  // Use marked.parse for full markdown conversion
+  const fullHTML = marked.parse(text);
+  if (text.length <= maxLength) {
+    return fullHTML;
+  } else {
+    const snippet = text.substring(0, maxLength) + " ...";
+    // Use marked.parseInline for inline markdown in summary
+    return `<details><summary>${marked.parseInline(snippet)}</summary>${fullHTML}</details>`;
+  }
+}
+
+// ======================
 // Utility Functions
 // ======================
 function setStatus(msg) {
@@ -71,7 +87,6 @@ export async function connectWallet() {
     signer = provider.getSigner();
     contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
     
-    // Log loaded ABI & available functions for debugging
     console.log("Loaded ABI:", CONTRACT_ABI);
     console.log("Contract available functions:", Object.keys(contract.functions));
     
@@ -202,6 +217,7 @@ async function revealAllBids() {
       params: { identity: encryptionKeyObj.identity, registry: REGISTRY_ADDRESS }
     });
     console.log("Decryption key response:", keyResp.data);
+    
     const finalDecryptionKey = keyResp.data?.message?.decryption_key;
     if (!finalDecryptionKey) {
       setStatus("Decryption key not available yet!");
@@ -225,7 +241,8 @@ async function revealAllBids() {
     console.log("Reveal-all tx sent:", tx);
     await tx.wait();
     setStatus(`All bids for RFP ${rfpId} revealed successfully!`);
-    document.getElementById("revealedBidsOutput").textContent = JSON.stringify(plaintextBids, null, 2);
+    // Render revealed bids in markdown with expand/collapse support.
+    document.getElementById("revealedBidsOutput").innerHTML = plaintextBids.map(text => createMarkdownDetails(text)).join("<hr>");
     loadRFPs(true); // Refresh list
   } catch (err) {
     console.error("revealAllBids error:", err);
@@ -252,30 +269,30 @@ async function loadRFPs(refresh = false) {
       const bidCount = rfp.bidCount.toNumber();
       let rfpDiv = document.createElement("div");
       rfpDiv.className = "list-item";
+      // Render title as plain text and description as markdown (with expand if long)
       let html = `<strong>RFP ID:</strong> ${i}<br>
                   <strong>Title:</strong> ${rfp.title}<br>
-                  <strong>Description:</strong> ${rfp.description}<br>
+                  <strong>Description:</strong> ${createMarkdownDetails(rfp.description)}<br>
                   <strong>Submission Deadline:</strong> ${formatTimestamp(rfp.submissionDeadline.toNumber())}<br>
                   <strong>Reveal Deadline:</strong> ${formatTimestamp(rfp.revealDeadline.toNumber())}<br>
                   <strong>Bids:</strong> ${bidCount}<br>`;
       rfpDiv.innerHTML = html;
       
-      // Append Bid and Reveal Buttons
+      // Buttons for bidding and revealing
       const btnContainer = document.createElement("div");
       btnContainer.style.marginTop = "10px";
       
-      // "Bid on this RFP" button:
+      // "Bid on this RFP" button
       const bidBtn = document.createElement("button");
       bidBtn.textContent = "Bid on this RFP";
       bidBtn.style.marginRight = "5px";
       bidBtn.onclick = () => {
-        // Switch to Submit Bid tab and prefill the RFP ID
         document.querySelector('.tab[data-tab="bid-tab"]').click();
         document.getElementById("rfpIdForBid").value = i;
       };
       btnContainer.appendChild(bidBtn);
       
-      // "Reveal Bids" button (only show if current time >= revealDeadline)
+      // "Reveal Bids" button (only if reveal deadline has passed)
       const currentTime = Math.floor(Date.now() / 1000);
       if (currentTime >= rfp.revealDeadline.toNumber()) {
         const revealBtn = document.createElement("button");
@@ -286,18 +303,17 @@ async function loadRFPs(refresh = false) {
         };
         btnContainer.appendChild(revealBtn);
       }
-      
       rfpDiv.appendChild(btnContainer);
       
-      // Append existing bids list
+      // Display bids for this RFP
       let bidList = document.createElement("div");
       bidList.style.marginLeft = "15px";
       for (let j = 0; j < bidCount; j++) {
         const bid = await contract.bids(i, j);
-        const currentTime = Math.floor(Date.now() / 1000);
         let bidContent = "";
-        if (currentTime >= rfp.revealDeadline.toNumber() && bid.revealed) {
-          bidContent = bid.plaintextBid;
+        // If bid is revealed and it's plaintext, render markdown
+        if (bid.revealed) {
+          bidContent = createMarkdownDetails(bid.plaintextBid);
         } else {
           bidContent = bid.encryptedBid;
         }
@@ -305,7 +321,7 @@ async function loadRFPs(refresh = false) {
         bidDiv.className = "bid-item";
         bidDiv.innerHTML = `<strong>Bid ID:</strong> ${j}<br>
                             <strong>Bidder:</strong> ${bid.bidder}<br>
-                            <strong>${(currentTime >= rfp.revealDeadline.toNumber() && bid.revealed) ? "Plaintext Bid" : "Encrypted Bid"}:</strong> ${bidContent}`;
+                            <strong>${bid.revealed ? "Plaintext Bid" : "Encrypted Bid"}:</strong> ${bidContent}`;
         bidList.appendChild(bidDiv);
       }
       rfpDiv.appendChild(bidList);
@@ -369,12 +385,14 @@ async function shutterEncryptPrivateKey(privateKeyHex, encryptionData, sigmaHex)
 // Event Listeners & Auto Initialization
 // ======================
 document.addEventListener("DOMContentLoaded", async () => {
+  // Cache bust ABI and config
   const config = await fetch("public_config.json?v=" + new Date().getTime()).then(res => res.json());
   CONTRACT_ADDRESS = config.contract_address;
   SHUTTER_API_BASE = config.shutter_api_base;
   REGISTRY_ADDRESS = config.registry_address;
   CONTRACT_ABI = await fetch("contract_abi.json?v=" + new Date().getTime()).then(res => res.json());
   
+  // Hook up tab buttons
   document.getElementById("createRFP-btn").addEventListener("click", createRFP);
   document.getElementById("encryptBid-btn").addEventListener("click", encryptBidForRFP);
   document.getElementById("submitBid-btn").addEventListener("click", submitBid);

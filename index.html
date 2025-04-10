@@ -140,7 +140,7 @@
           <input type="text" id="rfpTitle" placeholder="Enter RFP title" />
         </div>
         <div class="section">
-          <label for="rfpDescription">Description</label>
+          <label for="rfpDescription">Description (Markdown supported)</label>
           <textarea id="rfpDescription" placeholder="Enter RFP description"></textarea>
         </div>
         <div class="section">
@@ -162,7 +162,7 @@
           <input type="number" id="rfpIdForBid" placeholder="Enter RFP ID" />
         </div>
         <div class="section">
-          <label for="bidText">Your Bid Details</label>
+          <label for="bidText">Your Bid Details (Markdown supported)</label>
           <textarea id="bidText" placeholder="Enter your bid details"></textarea>
         </div>
         <button id="encryptBid-btn">Encrypt Bid</button>
@@ -183,13 +183,14 @@
         <button id="revealAllBids-btn">Reveal All Bids</button>
         <div class="section">
           <strong>Revealed Bids:</strong>
-          <pre id="revealedBidsOutput"></pre>
+          <div id="revealedBidsOutput"></div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Scripts -->
+  <!-- Include marked (Markdown parser) -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="./blst.js"></script>
   <script type="module" src="./main.js"></script>
   <script type="module" src="./app.js"></script>
