@@ -264,6 +264,7 @@ async function revealAllBids() {
 // ======================
 // F) Load and Display RFPs (with pagination, compact summary)
 // ======================
+// Updated loadRFPs function with disabled bid button for expired RFPs and disabled reveal button when already finalized/revealed
 async function loadRFPs(refresh = false) {
   try {
     const rfpCountBN = await contract.rfpCount();
@@ -287,7 +288,6 @@ async function loadRFPs(refresh = false) {
       } else if (currentTime < rfp.revealDeadline.toNumber()) {
         status = "reveal available";
       } else {
-        // After the reveal deadline, check if all bids are revealed:
         let totalRevealed = 0;
         for (let j = 0; j < bidCount; j++) {
           const bid = await contract.bids(i, j);
@@ -318,25 +318,47 @@ async function loadRFPs(refresh = false) {
         <p><strong>Reveal Deadline:</strong> ${formatTimestamp(rfp.revealDeadline.toNumber())}</p>
       `;
 
-      // Action buttons: "Bid on this RFP" / "Reveal Bids"
+      // Action buttons: Bid and Reveal
       let btnContainer = document.createElement("div");
       btnContainer.style.marginTop = "12px";
-      let bidBtn = document.createElement("button");
-      bidBtn.textContent = "Bid on this RFP";
-      bidBtn.style.marginRight = "5px";
-      bidBtn.onclick = () => {
-        document.querySelector('.tab[data-tab="bid-tab"]').click();
-        document.getElementById("rfpIdForBid").value = i;
-      };
-      btnContainer.appendChild(bidBtn);
-      if (currentTime >= rfp.revealDeadline.toNumber()) {
-        let revealBtn = document.createElement("button");
-        revealBtn.textContent = "Reveal Bids";
-        revealBtn.onclick = () => {
-          document.querySelector('.tab[data-tab="reveal-tab"]').click();
-          document.getElementById("rfpIdForReveal").value = i;
+      
+      // If submission deadline hasn't passed, allow bidding;
+      // otherwise, show a disabled button.
+      if (currentTime < rfp.submissionDeadline.toNumber()) {
+        let bidBtn = document.createElement("button");
+        bidBtn.textContent = "Bid on this RFP";
+        bidBtn.style.marginRight = "5px";
+        bidBtn.onclick = () => {
+          document.querySelector('.tab[data-tab="bid-tab"]').click();
+          document.getElementById("rfpIdForBid").value = i;
         };
-        btnContainer.appendChild(revealBtn);
+        btnContainer.appendChild(bidBtn);
+      } else {
+        let disabledBidBtn = document.createElement("button");
+        disabledBidBtn.textContent = "Bidding Closed";
+        disabledBidBtn.disabled = true;
+        disabledBidBtn.style.backgroundColor = "#999";
+        btnContainer.appendChild(disabledBidBtn);
+      }
+      
+      // Reveal button: Only add if current time is past revealDeadline.
+      // And if status is "finalized/revealed", show a disabled button.
+      if (currentTime >= rfp.revealDeadline.toNumber()) {
+        if (status === "finalized/revealed") {
+          let disabledRevealBtn = document.createElement("button");
+          disabledRevealBtn.textContent = "Already Revealed";
+          disabledRevealBtn.disabled = true;
+          disabledRevealBtn.style.backgroundColor = "#999";
+          btnContainer.appendChild(disabledRevealBtn);
+        } else {
+          let revealBtn = document.createElement("button");
+          revealBtn.textContent = "Reveal Bids";
+          revealBtn.onclick = () => {
+            document.querySelector('.tab[data-tab="reveal-tab"]').click();
+            document.getElementById("rfpIdForReveal").value = i;
+          };
+          btnContainer.appendChild(revealBtn);
+        }
       }
       detailsContent.appendChild(btnContainer);
 
@@ -380,6 +402,7 @@ async function loadRFPs(refresh = false) {
   }
 }
 
+
 // ======================
 // Shutter Integration Functions
 // ======================
@@ -420,7 +443,6 @@ async function fetchEncryptionData() {
 }
 
 async function shutterEncryptPrivateKey(privateKeyHex, encryptionData, sigmaHex) {
-  // Create a random sigma if not provided
   const randomSigma = sigmaHex || "0x" + window.crypto.getRandomValues(new Uint8Array(32))
     .reduce((acc, byte) => acc + byte.toString(16).padStart(2, "0"), "");
   return await window.shutter.encryptData(privateKeyHex, encryptionData.identity, encryptionData.eon_key, randomSigma);
