@@ -56,9 +56,11 @@ function generateRandomHex(sizeInBytes) {
   return "0x" + Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
+
 function formatTimestamp(timestamp) {
-  return new Date(timestamp * 1000).toLocaleString();
+  return new Date(timestamp * 1000).toLocaleString(undefined, { timeZoneName: 'short' });
 }
+
 
 // ======================
 // A) Connect Wallet (auto on page load)
