@@ -415,14 +415,21 @@ async function loadRFPsForOrganization(orgId) {
         } else {
           let revealBtn = document.createElement("button");
           revealBtn.textContent = "Reveal Bids";
-          revealBtn.onclick = () => {
-            // Switch tab to "Reveal Bids"
-            document.querySelector('.tab[data-tab="reveal-tab"]').click();
-            document.getElementById("rfpIdForReveal").value = numericRfpId;
+          revealBtn.onclick = async () => {
+            try {
+              // Attempt to reveal directly using our helper function.
+              await revealAllBidsDirect(numericRfpId);
+            } catch (e) {
+              console.error("Direct reveal failed:", e);
+              // Fallback: switch to the reveal tab and prefill the RFP ID.
+              document.querySelector('.tab[data-tab="reveal-tab"]').click();
+              document.getElementById("rfpIdForReveal").value = numericRfpId;
+            }
           };
           btnContainer.appendChild(revealBtn);
         }
       }
+      
       detailsContent.appendChild(btnContainer);
 
       // Expandable list of bids
@@ -465,6 +472,16 @@ async function loadRFPsForOrganization(orgId) {
 
 // Attach this function to window so that rfp.html can call it inline
 window.loadRFPsForOrganization = loadRFPsForOrganization;
+
+// New helper to reveal all bids for a given RFP directly.
+async function revealAllBidsDirect(rfpId) {
+  // Pre-fill the reveal RFP ID input field
+  document.getElementById("rfpIdForReveal").value = rfpId;
+  // Call the existing revealAllBids function, which reads the input field.
+  await revealAllBids();
+}
+
+
 
 // ======================
 // Shutter Integration
