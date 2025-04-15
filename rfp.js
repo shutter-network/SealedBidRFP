@@ -8,6 +8,7 @@ import { Buffer } from "https://esm.sh/buffer";
 let provider = null;
 let signer = null;
 let contract = null;
+let contractReadOnly = null; // <-- Added read-only contract declaration
 
 let shutterIdentity = null;
 let encryptionData = null; // Used during RFP creation
@@ -318,25 +319,25 @@ async function loadRFPsForOrganization(orgId) {
     if (isNaN(numericOrgId)) {
       throw new Error("Invalid organisation ID");
     }
-    // The *old* contract has getOrganization(...) returning [string name, uint256[] rfpIds]
-    const orgData = await contract.getOrganization(numericOrgId);
-    // orgData[0] = orgName, orgData[1] = rfpIds
+    // Use the read-only contract instance here.
+    const orgData = await contractReadOnly.getOrganization(numericOrgId);
     const orgName = orgData[0];
     const rfpIds = orgData[1];
 
-    // optionally update display
+    // Optionally update display
     const activeOrgNameEl = document.getElementById("activeOrgName");
     if (activeOrgNameEl) {
       activeOrgNameEl.textContent = "Organisation: " + orgName + " (ID: " + orgId + ")";
     }
 
-    // build the RFP list
+    // Build the RFP list
     const container = document.getElementById("rfpList");
     container.innerHTML = "";
 
     for (let idx = 0; idx < rfpIds.length; idx++) {
       const numericRfpId = ethers.BigNumber.from(rfpIds[idx]).toNumber();
-      let rfp = await contract.rfps(numericRfpId);
+      // Use the read-only instance for fetching RFP details.
+      let rfp = await contractReadOnly.rfps(numericRfpId);
       const bidCount = rfp.bidCount.toNumber();
       const currentTime = Math.floor(Date.now() / 1000);
 
@@ -346,10 +347,9 @@ async function loadRFPsForOrganization(orgId) {
       } else if (currentTime < rfp.revealDeadline.toNumber()) {
         status = "reveal available";
       } else {
-        // see if all bids are revealed
         let totalRevealed = 0;
         for (let j = 0; j < bidCount; j++) {
-          const bid = await contract.bids(numericRfpId, j);
+          const bid = await contractReadOnly.bids(numericRfpId, j);
           if (bid.revealed) totalRevealed++;
         }
         status =
@@ -358,7 +358,7 @@ async function loadRFPsForOrganization(orgId) {
             : "reveal available";
       }
 
-      // Build the HTML
+      // Build the HTML for each RFP
       const detailsElem = document.createElement("details");
       detailsElem.className = "rfp-summary";
 
@@ -381,11 +381,11 @@ async function loadRFPsForOrganization(orgId) {
         <p><strong>Reveal Deadline:</strong> ${formatTimestamp(rfp.revealDeadline.toNumber())}</p>
       `;
 
-      // Buttons
+      // Buttons container
       let btnContainer = document.createElement("div");
       btnContainer.style.marginTop = "12px";
 
-      // If current time < submission deadline, show "Bid on this RFP" button
+      // Bid button or disabled state depending on the deadline
       if (currentTime < rfp.submissionDeadline.toNumber()) {
         let bidBtn = document.createElement("button");
         bidBtn.textContent = "Bid on this RFP";
@@ -404,7 +404,7 @@ async function loadRFPsForOrganization(orgId) {
         btnContainer.appendChild(disabledBidBtn);
       }
 
-      // If current time >= revealDeadline, show "Reveal Bids" or "Already Revealed"
+      // Reveal bids button (or disabled state) based on the reveal deadline
       if (currentTime >= rfp.revealDeadline.toNumber()) {
         if (status === "finalized/revealed") {
           let disabledRevealBtn = document.createElement("button");
@@ -417,11 +417,9 @@ async function loadRFPsForOrganization(orgId) {
           revealBtn.textContent = "Reveal Bids";
           revealBtn.onclick = async () => {
             try {
-              // Attempt to reveal directly using our helper function.
               await revealAllBidsDirect(numericRfpId);
             } catch (e) {
               console.error("Direct reveal failed:", e);
-              // Fallback: switch to the reveal tab and prefill the RFP ID.
               document.querySelector('.tab[data-tab="reveal-tab"]').click();
               document.getElementById("rfpIdForReveal").value = numericRfpId;
             }
@@ -432,7 +430,7 @@ async function loadRFPsForOrganization(orgId) {
       
       detailsContent.appendChild(btnContainer);
 
-      // Expandable list of bids
+      // Expandable list of bids using the read-only instance
       let bidsDetails = document.createElement("details");
       bidsDetails.className = "rfp-bids";
       let bidsSummary = document.createElement("summary");
@@ -442,7 +440,7 @@ async function loadRFPsForOrganization(orgId) {
       let bidList = document.createElement("div");
       bidList.style.marginLeft = "15px";
       for (let j = 0; j < bidCount; j++) {
-        const bid = await contract.bids(numericRfpId, j);
+        const bid = await contractReadOnly.bids(numericRfpId, j);
         let bidContent = "";
         if (bid.revealed) {
           bidContent = createMarkdownDetails(bid.plaintextBid);
@@ -469,6 +467,7 @@ async function loadRFPsForOrganization(orgId) {
     setStatus("Error loading RFPs: " + err.message);
   }
 }
+
 
 // Attach this function to window so that rfp.html can call it inline
 window.loadRFPsForOrganization = loadRFPsForOrganization;
@@ -550,9 +549,28 @@ document.addEventListener("DOMContentLoaded", async () => {
     SHUTTER_API_BASE = config.shutter_api_base;
     REGISTRY_ADDRESS = config.registry_address;
     
+    // Use the RPC URL from config. Prefer 'rpc_url' if available.
+    const rpcUrl = config.rpc_url || config.public_rpc;
+    if (!rpcUrl) {
+      throw new Error("RPC URL not defined in configuration.");
+    }
+    
     CONTRACT_ABI = await fetch("contract_abi.json?v=" + new Date().getTime()).then(res => res.json());
+    
+    // Create read-only provider using the RPC endpoint
+    let publicRpcProvider = new ethers.providers.JsonRpcProvider(rpcUrl);
+    
+    // Verify connection by detecting network
+    const network = await publicRpcProvider.getNetwork();
+    if (network.chainId !== 100) {  // 100 is the Gnosis Chain ID
+      throw new Error(`RPC connected to wrong network (Chain ID: ${network.chainId}). Expected Gnosis (100).`);
+    }
+    console.log("Read-only provider connected to network:", network);
+    
+    // Initialize read-only contract instance for view operations
+    contractReadOnly = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, publicRpcProvider);
 
-    // 2) Connect wallet only after we have the ABI
+    // 2) Connect wallet (for transactions) only after we have the ABI
     await connectWallet();
 
     // 3) Prefill default deadlines (optional)
@@ -568,7 +586,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("submitBid-btn").addEventListener("click", submitBid);
     document.getElementById("revealAllBids-btn").addEventListener("click", revealAllBids);
 
-    // 5) “Load More” RFPs button
+    // 5) “Load More” RFPs button – calls our load function which uses the read-only contract instance
     document.getElementById("loadMoreRFPs-btn").addEventListener("click", () => {
       const orgId = document.getElementById("orgIdForRFP").value.trim();
       window.loadRFPsForOrganization(orgId);
@@ -591,7 +609,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
     });
 
-    // 7) If there's ?orgId= in the URL, load those RFPs
+    // 7) If there's ?orgId= in the URL, load those RFPs using the read-only provider
     const urlParams = new URLSearchParams(window.location.search);
     const orgId = urlParams.get("orgId");
     if (orgId) {
@@ -607,4 +625,3 @@ document.addEventListener("DOMContentLoaded", async () => {
     setStatus("Error initializing page: " + err.message);
   }
 });
-
