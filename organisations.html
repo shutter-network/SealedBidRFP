@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Organization Overview - On-Chain Sealed Bid</title>
+  <style>
+    /* Global Styles */
+    * { box-sizing: border-box; font-family: Arial, sans-serif; }
+    body { margin: 0; padding: 0; background-color: #f8f9fa; color: #333; }
+    .header {
+      background-color: #0044a4;
+      color: #fff;
+      padding: 20px;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .header h1 { margin: 0; font-size: 28px; }
+    .container {
+      width: 90%; max-width: 800px;
+      margin: 0 auto;
+    }
+    .section { margin-bottom: 30px; }
+    label { display: block; margin-top: 10px; font-weight: bold; }
+    input {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      background-color: #0044a4;
+      color: #fff;
+      padding: 8px 14px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    button:hover { background-color: #003377; }
+    .org-item {
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      background-color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Organization Overview</h1>
+  </div>
+  <div class="container">
+    <div id="status">Status: Not connected.</div>
+    
+    <!-- Section: Add New Organization -->
+    <div class="section">
+      <h2>Add New Organisation</h2>
+      <label for="orgName">Organisation Name</label>
+      <input type="text" id="orgName" placeholder="Enter organisation name" />
+      <button id="createOrg-btn">Add Organisation</button>
+    </div>
+    
+    <!-- Section: List of Organisations -->
+    <div class="section">
+      <h2>Existing Organisations</h2>
+      <div id="orgList"></div>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script type="module" src="./organisations.js"></script>
+</body>
+</html>
