@@ -127,7 +127,7 @@ async function connectWalletOnLoad() {
       } catch (requestError) {
            // Handle cases where the user rejects the connection request
            console.error("Wallet connection request rejected:", requestError);
-           setStatus("Wallet connection rejected by user. Read-only mode.");
+           setStatus("Wallet connection rejected by user. Read-only mode. Refresh page to retry wallet connection.");
            disableInteraction(true);
            return; // Stop the connection attempt
       }
@@ -149,7 +149,7 @@ async function connectWalletOnLoad() {
                    const gnosisChainParams = {
                        chainId: '0x64', // 100
                        chainName: 'Gnosis Chain',
-                       nativeCurrency: { name: 'xDAI', symbol: 'xDAI', decimals: 18 },
+                       nativeCurrency: { name: 'XDAI', symbol: 'XDAI', decimals: 18 },
                        rpcUrls: [GNOSIS_RPC_URL], // Use RPC from config
                        blockExplorerUrls: ['https://gnosisscan.io']
                    };
