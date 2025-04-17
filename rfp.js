@@ -570,15 +570,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Initialize read-only contract instance for view operations
     contractReadOnly = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, publicRpcProvider);
 
-    // 2) Connect wallet (for transactions) only after we have the ABI
-    await connectWallet();
+    // 2) Connect wallet (for transactions)
+    connectWallet().catch(err => console.warn("Wallet connection skipped/declined:", err));
 
     // 3) Prefill default deadlines (optional)
     const now = new Date();
     const submissionTime = new Date(now.getTime() + 4 * 60 * 1000);
     const revealTime = new Date(now.getTime() + 5 * 60 * 1000);
-    document.getElementById("submissionDeadline").value = submissionTime.toISOString().slice(0, 16);
-    document.getElementById("rfpRevealDeadline").value = revealTime.toISOString().slice(0, 16);
+    document.getElementById("submissionDeadline").value = submissionTime.toLocaleString('sv-SE', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }).replace(' ', 'T').slice(0, 16);
+    document.getElementById("rfpRevealDeadline").value = revealTime.toLocaleString('sv-SE', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }).replace(' ', 'T').slice(0, 16);
+    
 
     // 4) Hook up button event listeners inside each tab
     document.getElementById("createRFP-btn").addEventListener("click", createRFP);
