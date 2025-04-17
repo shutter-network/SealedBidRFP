@@ -14,14 +14,47 @@
     body { margin: 0; padding: 0; background-color: #f8fafc; color: #1f2937; }
 
     /* Header */
-    .header {
-      background-color: #0044a4;
-      color: #fff;
-      padding: 24px 16px;
-      text-align: center;
-      margin-bottom: 32px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
+
+  .header {
+    position: relative;
+    background-color: #0044a4;
+    padding: 20px 0;
+    margin-bottom: 20px;
+  }
+
+  /* Left group: logo + stacked text */
+  .header-left-group {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  .header-left-group img {
+    height: 95px;
+    width: auto;
+    margin-right: 12px;
+  }
+  .header-left-group .header-text {
+    font-family: "Arial Black", Arial, sans-serif;
+    font-size: 28px;
+    color: #fff;
+    text-align: left;
+    line-height: 1.2;
+  }
+
+  /* Right‑side “powered by” logo */
+  .header-right {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  .header-right img {
+    height: 320px;
+    width: auto;
+  }
+
     .header h1 { margin: 0; font-size: 32px; font-weight: 600; }
 
     /* Layout */
@@ -78,9 +111,21 @@
   </style>
 </head>
 <body>
-  <div class="header">
-    <h1>Organization Overview</h1>
+<!-- Header –‑ identical structure to rfp.html -->
+<div class="header">
+  <div class="header-left-group">
+    <img src="logo.png" alt="Logo" />
+    <div class="header-text">
+      SHUTTER<br>
+      SEALED BID<br>
+      RFPs
+    </div>
   </div>
+  <div class="header-right">
+    <img src="powered_shutter_api.png" alt="Powered by Shutter API" />
+  </div>
+</div>
+
   <div class="container">
     <div id="status">Status: Not connected.</div>
     
