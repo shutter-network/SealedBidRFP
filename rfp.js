@@ -391,7 +391,6 @@ async function loadRFPsForOrganization(orgId) {
         bidBtn.textContent = "Bid on this RFP";
         bidBtn.style.marginRight = "5px";
         bidBtn.onclick = () => {
-          // Switch tab to "Submit Bid"
           document.querySelector('.tab[data-tab="bid-tab"]').click();
           document.getElementById("rfpIdForBid").value = numericRfpId;
         };
@@ -427,7 +426,19 @@ async function loadRFPsForOrganization(orgId) {
           btnContainer.appendChild(revealBtn);
         }
       }
-      
+
+      // **New link to the per-RFP page**
+      const detailLink = document.createElement("a");
+      detailLink.href = `rfp_detail.html?orgId=${orgId}&rfpId=${numericRfpId}`;
+      detailLink.textContent = "View RFP Page";
+      detailLink.style.marginLeft = "10px";
+      detailLink.style.fontWeight = "bold";
+      detailLink.style.color = "#0044a4";
+      detailLink.style.textDecoration = "none";
+      detailLink.onmouseover = () => detailLink.style.textDecoration = "underline";
+      detailLink.onmouseout = () => detailLink.style.textDecoration = "none";
+      btnContainer.appendChild(detailLink);
+
       detailsContent.appendChild(btnContainer);
 
       // Expandable list of bids using the read-only instance
@@ -441,12 +452,9 @@ async function loadRFPsForOrganization(orgId) {
       bidList.style.marginLeft = "15px";
       for (let j = 0; j < bidCount; j++) {
         const bid = await contractReadOnly.bids(numericRfpId, j);
-        let bidContent = "";
-        if (bid.revealed) {
-          bidContent = createMarkdownDetails(bid.plaintextBid);
-        } else {
-          bidContent = createExpandableText(bid.encryptedBid, 100);
-        }
+        let bidContent = bid.revealed
+          ? createMarkdownDetails(bid.plaintextBid)
+          : createExpandableText(bid.encryptedBid, 100);
         let bidDiv = document.createElement("div");
         bidDiv.className = "bid-item";
         bidDiv.innerHTML = `
@@ -467,7 +475,6 @@ async function loadRFPsForOrganization(orgId) {
     setStatus("Error loading RFPs: " + err.message);
   }
 }
-
 
 // Attach this function to window so that rfp.html can call it inline
 window.loadRFPsForOrganization = loadRFPsForOrganization;
