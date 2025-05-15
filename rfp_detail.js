@@ -105,7 +105,7 @@ async function loadRFPDetails(orgId, rfpId) {
     // Insert details above bids
     const detailsHTML = `
       <div class="section">
-        <h2>RFP Details</h2>
+        <h2 class="rfp-title">${rfp.title}</h2>
         <p><strong>Description:</strong><br>${createMarkdownDetails(rfp.description)}</p>
         <p><strong>Submission Deadline:</strong> ${formatTimestamp(rfp.submissionDeadline.toNumber())}</p>
         <p><strong>Reveal Deadline:</strong> ${formatTimestamp(rfp.revealDeadline.toNumber())}</p>
